@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #############################################################################################################################
 # my-theme.sh - Dynamic Wallpaper & System Theme Engine
-# Version: v1.0.7
+# Version: v1.0.8
 # Build Date: 02/24/2026
 # Author: Wael Isa
 # Website: https://www.wael.name
@@ -14,8 +14,8 @@
 # ██║ ╚═╝ ██║   ██║          ██║   ██║  ██║███████╗██║ ╚═╝ ██║███████╗
 # ╚═╝     ╚═╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚══════╝
 #
-#                        Version v1.0.7 - Wael Isa
-#              COMPLETE AUTO-INSTALL & AUTO-CREATE EDITION
+#                        Version v1.0.8 - Wael Isa
+#                    SAFE & ORGANIZED - PICTURES/MY-THEME
 #
 # Description: Dynamic wallpaper and system theme engine with WallHaven integration,
 #              lockscreen synchronization, and full Gum-based TUI.
@@ -24,9 +24,11 @@
 # Features:
 #   • Interactive menu by default (just run ./my-theme.sh)
 #   • 100% self-contained - everything in one file
-#   • AUTO-CREATES missing profiles when switching
+#   • SAFE - Works ONLY in ~/Pictures/my-theme, never touches user's Pictures directly
+#   • SMART - Shows helpful notes when no wallpapers are found
+#   • AUTO-CREATES all missing folders
 #   • AUTO-INSTALLS all dependencies on first run
-#   • AUTO-CREATES wallpaper directories
+#   • AUTO-CREATES default profiles and rules
 #   • AUTO-CREATES default hooks
 #   • Creates missing configuration files
 #   • Lockscreen synchronization (betterlockscreen & hyprlock)
@@ -43,10 +45,12 @@
 #   • Debounced folder watcher with deep sleep
 #
 # Changelog:
-#   v1.0.7 - ADDED: Auto-create missing profiles
-#            ADDED: Full auto-install on first run
-#            ADDED: Auto-create all missing directories and files
-#            FIXED: Profile not found error now creates profile
+#   v1.0.8 - SAFE MODE: All wallpapers now in ~/Pictures/my-theme
+#            Added smart "no wallpaper" notifications
+#            Never touches user's Pictures folder directly
+#            Auto-creates all required subfolders
+#   v1.0.7 - Added auto-create missing profiles
+#            Added full auto-install on first run
 #   v1.0.6 - Removed set -e to prevent silent exits
 #   v1.0.5 - Fixed banner double-print issue
 #   v1.0.4 - Added auto-install prompt for gum
@@ -61,15 +65,16 @@
 set -uo pipefail
 
 # Version
-SCRIPT_VERSION="v1.0.7"
+SCRIPT_VERSION="v1.0.8"
 SCRIPT_NAME=$(basename "$0")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Directories
+# Directories - SAFE MODE: All in ~/Pictures/my-theme, never touch ~/Pictures directly!
+MY_THEME_PICTURES="${HOME}/Pictures/my-theme"
+WALLPAPER_DIR="${MY_THEME_PICTURES}/wallpapers"
+WALLHAVEN_DIR="${MY_THEME_PICTURES}/wallhaven"
 CONFIG_DIR="${HOME}/.config/my-theme"
 CACHE_DIR="${HOME}/.cache/my-theme"
-WALLPAPER_DIR="${HOME}/Pictures/Wallpapers"
-WALLHAVEN_DIR="${HOME}/Pictures/Wallpapers/WallHaven"
 PROFILES_DIR="${CONFIG_DIR}/profiles"
 PROFILE_RULES_DIR="${CONFIG_DIR}/profile-rules"
 SNAPSHOTS_DIR="${CONFIG_DIR}/snapshots"
@@ -93,6 +98,7 @@ LAST_ACTIVE_PROFILE="${CACHE_DIR}/last_active_profile"
 WALLHAVEN_CONFIG="${CONFIG_DIR}/wallhaven.conf"
 API_KEY_FILE="${CONFIG_DIR}/api.key"
 FIRST_RUN_FILE="${CACHE_DIR}/first_run_complete"
+NO_WALLPAPER_NOTICE="${CACHE_DIR}/no_wallpaper_notice_shown"
 
 # Cache settings
 WEATHER_CACHE_AGE=900  # 15 minutes
@@ -158,13 +164,12 @@ echo -e "${CYAN}${BOLD}╚══════════════════
 # Create directories immediately (NEVER exit on failure - just warn)
 mkdir -p "${CONFIG_DIR}" "${CACHE_DIR}" "${GRADIENCE_DIR}" "${HOOKS_DIR}" \
          "${PROFILES_DIR}" "${PROFILE_RULES_DIR}" "${SNAPSHOTS_DIR}" \
-         "${THUMBNAILS_DIR}" "${WALLHAVEN_DIR}" "${WALLHAVEN_IMAGE_CACHE}" \
+         "${THUMBNAILS_DIR}" "${WALLHAVEN_IMAGE_CACHE}" \
          "${DESKTOP_ENTRY_DIR}" "${SYSTEMD_USER_DIR}" 2>/dev/null || {
     echo -e "${YELLOW}⚠️  Warning: Could not create some directories${NC}" >&2
 }
 
 # ==================== AUTO-INSTALL FUNCTION ====================
-# This runs on first start to ensure everything is set up
 auto_install() {
     # Skip if already run
     if [[ -f "$FIRST_RUN_FILE" ]]; then
@@ -228,27 +233,51 @@ auto_install() {
         deps_installed=true
     fi
 
-    # Create default wallpaper directories and sample wallpaper notice
-    mkdir -p "${WALLPAPER_DIR}"/{clear,rainy,cloudy,snowy,foggy,stormy,night,general} 2>/dev/null
+    # Create SAFE wallpaper directories in ~/Pictures/my-theme (never touch ~/Pictures directly!)
+    mkdir -p "${MY_THEME_PICTURES}" 2>/dev/null
 
-    # Create a notice file about adding wallpapers
-    if [[ ! -f "${WALLPAPER_DIR}/README.txt" ]]; then
-        cat > "${WALLPAPER_DIR}/README.txt" << EOF
+    # Create all wallpaper category folders
+    mkdir -p "${WALLPAPER_DIR}"/{clear,rainy,cloudy,snowy,foggy,stormy,night,general,morning,day,evening} 2>/dev/null
+
+    # Create WallHaven directory
+    mkdir -p "${WALLHAVEN_DIR}" 2>/dev/null
+
+    # Create a helpful README file
+    cat > "${MY_THEME_PICTURES}/README.txt" << EOF
 MY THEME ENGINE - WALLPAPER DIRECTORY
 
-Please add your wallpapers to these folders:
-- clear/      - Sunny/clear weather wallpapers
-- rainy/      - Rainy weather wallpapers
-- cloudy/     - Cloudy weather wallpapers
-- snowy/      - Snowy weather wallpapers
-- foggy/      - Foggy weather wallpapers
-- stormy/     - Stormy weather wallpapers
-- night/      - Night time wallpapers
-- general/    - General/default wallpapers
+All wallpapers for My Theme Engine should be placed in:
+  ${MY_THEME_PICTURES}
 
-You can also use WallHaven to download wallpapers automatically!
+Folder Structure:
+  wallpapers/clear/      - Sunny/clear weather wallpapers
+  wallpapers/rainy/      - Rainy weather wallpapers
+  wallpapers/cloudy/     - Cloudy weather wallpapers
+  wallpapers/snowy/      - Snowy weather wallpapers
+  wallpapers/foggy/      - Foggy weather wallpapers
+  wallpapers/stormy/     - Stormy weather wallpapers
+  wallpapers/night/      - Night time wallpapers
+  wallpapers/morning/    - Morning wallpapers
+  wallpapers/day/        - Day time wallpapers
+  wallpapers/evening/    - Evening wallpapers
+  wallpapers/general/    - General/default wallpapers
+  wallhaven/             - Automatically downloaded WallHaven wallpapers
+
+NOTE: The script NEVER touches your main ~/Pictures folder directly.
+All operations are confined to ~/Pictures/my-theme
+
+You can add your own wallpapers to any of the folders above.
+Use WallHaven integration to automatically download wallpapers!
+
+Happy theming! 🎨
 EOF
-    fi
+
+    # Create a sample notice in each folder (optional)
+    for folder in clear rainy cloudy snowy foggy stormy night morning day evening general; do
+        if [[ ! -f "${WALLPAPER_DIR}/${folder}/.placeholder" ]]; then
+            touch "${WALLPAPER_DIR}/${folder}/.placeholder" 2>/dev/null
+        fi
+    done
 
     # Create default profiles
     for profile in work gaming relax web; do
@@ -293,11 +322,50 @@ EOF
     date > "$FIRST_RUN_FILE"
 
     echo -e "${GREEN}✅ First-time setup complete!${NC}"
+    echo -e "${CYAN}📁 Wallpapers directory: ${MY_THEME_PICTURES}${NC}"
+    echo -e "${CYAN}💡 Add your wallpapers to the folders above or use WallHaven to download some!${NC}"
 
     if [[ "$deps_installed" == true ]]; then
         echo -e "${YELLOW}⚠️  Some dependencies were installed. Please restart the script.${NC}"
         exit 0
     fi
+}
+
+# ==================== CHECK FOR WALLPAPERS ====================
+check_for_wallpapers() {
+    local dir="${1:-$WALLPAPER_DIR}"
+    local found=false
+
+    # Quick check if any images exist
+    if find "$dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" -o -iname "*.gif" \) 2>/dev/null | head -1 | grep -q .; then
+        found=true
+    fi
+
+    if [[ "$found" == false ]] && [[ ! -f "$NO_WALLPAPER_NOTICE" ]]; then
+        # Show notice only once
+        touch "$NO_WALLPAPER_NOTICE"
+
+        echo -e "${YELLOW}╔════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${YELLOW}║                    NO WALLPAPERS FOUND!                        ║${NC}"
+        echo -e "${YELLOW}╚════════════════════════════════════════════════════════════════╝${NC}"
+        echo
+        echo -e "${CYAN}Your wallpaper directory is empty:${NC}"
+        echo -e "  ${BOLD}${WALLPAPER_DIR}${NC}"
+        echo
+        echo -e "${GREEN}Options:${NC}"
+        echo -e "  1. ${BOLD}Add your own wallpapers${NC} to the folders above"
+        echo -e "  2. ${BOLD}Use WallHaven${NC} to download wallpapers automatically"
+        echo -e "  3. ${BOLD}Run with --force${NC} to use any available images (if any appear later)"
+        echo
+        echo -e "${CYAN}The menu will still work - you can configure settings and use WallHaven!${NC}"
+        echo
+
+        if command -v gum >/dev/null 2>&1 && [[ "$IS_TERMINAL" == true ]]; then
+            gum confirm "Continue to menu?" --affirmative="Yes" --negative="Exit" || exit 0
+        fi
+    fi
+
+    return 0
 }
 
 # ==================== CORE FUNCTIONS ====================
@@ -636,6 +704,16 @@ get_profile_wallpaper_dir() {
     fi
 }
 
+# Check if any wallpapers exist in directory
+has_wallpapers() {
+    local dir="$1"
+    if [[ -d "$dir" ]] && find "$dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | head -1 | grep -q .; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Select wallpaper
 select_wallpaper() {
     local condition="$1"
@@ -648,14 +726,21 @@ select_wallpaper() {
 
     # Force mode - random from main dir
     if [[ "$FORCE_MODE" == true ]]; then
-        selected=$(find "$dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf -n 1)
-        echo "$selected"
+        if has_wallpapers "$dir"; then
+            selected=$(find "$dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf -n 1)
+        fi
+        if [[ -n "$selected" ]]; then
+            echo "$selected"
+        else
+            print_warning "No wallpapers found in $dir"
+            echo ""
+        fi
         return
     fi
 
     # Try specific subfolder
     target="${dir}/${condition}"
-    if [[ -d "$target" ]] && [[ -n "$(ls -A "$target" 2>/dev/null)" ]]; then
+    if [[ -d "$target" ]] && has_wallpapers "$target"; then
         # Try aspect ratio match first
         while IFS= read -r img; do
             if check_aspect_ratio "$img"; then
@@ -671,8 +756,14 @@ select_wallpaper() {
 
     # Fallback to main directory
     if [[ -z "$selected" ]]; then
-        print_warning "Folder '${condition}' not found, using main directory"
-        selected=$(find "$dir" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf -n 1)
+        if [[ -d "$dir" ]] && has_wallpapers "$dir"; then
+            print_warning "No wallpapers in '${condition}' folder, using main directory"
+            selected=$(find "$dir" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf -n 1)
+        else
+            print_warning "No wallpapers found anywhere in ${dir}"
+            echo ""
+            return
+        fi
     fi
 
     echo "$selected"
@@ -1099,7 +1190,6 @@ check_and_switch_profile() {
 }
 
 # ==================== AUTO-CREATE PROFILE ====================
-# This function creates a profile if it doesn't exist
 ensure_profile_exists() {
     local profile="$1"
 
@@ -1184,7 +1274,7 @@ switch_profile() {
     if [[ "$profile" == "default" ]]; then
         rm -f "$CURRENT_PROFILE"
         CURRENT_THEME_PROFILE="default"
-        WALLPAPER_DIR="${HOME}/Pictures/Wallpapers"
+        WALLPAPER_DIR="${MY_THEME_PICTURES}/wallpapers"
     else
         echo "$profile" > "$CURRENT_PROFILE"
         CURRENT_THEME_PROFILE="$profile"
@@ -1306,7 +1396,13 @@ update_theme() {
         wallpaper=$(select_wallpaper "$condition")
     fi
 
-    [[ -z "$wallpaper" ]] && { print_warning "No wallpaper found"; return 1; }
+    if [[ -z "$wallpaper" ]]; then
+        print_warning "No wallpaper found! Please add wallpapers to:"
+        print_warning "  ${WALLPAPER_DIR}/${condition}"
+        print_warning "  or use WallHaven to download some!"
+        notify "No Wallpaper" "Please add wallpapers or use WallHaven" "normal"
+        return 1
+    fi
 
     CURRENT_WALLPAPER="$wallpaper"
     print_success "Selected: $(basename "$wallpaper")"
@@ -1477,6 +1573,7 @@ reset_config() {
     stop_daemon 2>/dev/null || true
     rm -rf "${CACHE_DIR:?}"/* 2>/dev/null
     rm -f "$SETTINGS_FILE" "$CURRENT_PROFILE" "$LAST_ACTIVE_PROFILE" "$WALLHAVEN_CONFIG" "$API_KEY_FILE"
+    rm -f "$NO_WALLPAPER_NOTICE"
     mkdir -p "$CACHE_DIR" "$HOOKS_DIR"
     CURRENT_THEME_PROFILE="default"
     print_success "Configuration reset"
@@ -1524,7 +1621,7 @@ self_test() {
 
     # Test config dirs
     echo "• Config directories:"
-    for dir in "$CONFIG_DIR" "$CACHE_DIR" "$WALLPAPER_DIR"; do
+    for dir in "$CONFIG_DIR" "$CACHE_DIR" "$MY_THEME_PICTURES"; do
         echo -n "  $dir... "
         if [[ -d "$dir" ]]; then
             echo -e "${GREEN}✓${NC}"
@@ -1532,6 +1629,14 @@ self_test() {
             echo -e "${CYAN}ℹ Will be created${NC}"
         fi
     done
+
+    # Test for wallpapers
+    echo -n "• Wallpapers found: "
+    if has_wallpapers "$WALLPAPER_DIR"; then
+        echo -e "${GREEN}✓ Yes${NC}"
+    else
+        echo -e "${YELLOW}⚠ None (use WallHaven to download)${NC}"
+    fi
 
     echo "========================================"
     echo -e "${GREEN}✅ Self-test complete${NC}"
@@ -1709,6 +1814,12 @@ gum_main_menu() {
             *"Select wallpaper"*)
                 local dir="$WALLPAPER_DIR"
                 [[ "$CURRENT_THEME_PROFILE" != "default" ]] && dir=$(get_profile_wallpaper_dir "$CURRENT_THEME_PROFILE")
+                if ! has_wallpapers "$dir"; then
+                    print_warning "No wallpapers found in $dir"
+                    print_info "Use WallHaven to download some, or add your own!"
+                    sleep 2
+                    continue
+                fi
                 local wall
                 wall=$(find "$dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | gum choose --height=20)
                 [[ -n "$wall" ]] && SPECIFIC_WALLPAPER="$wall" update_theme "specific"
@@ -1843,8 +1954,8 @@ print_banner() {
 ║   ██║ ╚═╝ ██║   ██║          ██║   ██║  ██║███████╗██║ ╚═╝ ██║███████╗       ║
 ║   ╚═╝     ╚═╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚══════╝       ║
 ║                                                                               ║
-║                        Version v1.0.7 - Wael Isa                             ║
-║              COMPLETE AUTO-INSTALL & AUTO-CREATE EDITION                      ║
+║                        Version v1.0.8 - Wael Isa                             ║
+║                    SAFE & ORGANIZED - PICTURES/MY-THEME                       ║
 ║                                                                               ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 EOF
@@ -1962,6 +2073,9 @@ main() {
 
     # Handle interactive mode
     if [[ "$interactive_mode" == true ]]; then
+        # Check for wallpapers and show notice if none found
+        check_for_wallpapers
+
         if command -v gum >/dev/null 2>&1; then
             gum_main_menu
             exit 0
