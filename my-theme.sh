@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #############################################################################################################################
 # my-theme.sh - Dynamic Wallpaper & System Theme Engine
-# Version: v1.0.6
+# Version: v1.0.7
 # Build Date: 02/24/2026
 # Author: Wael Isa
 # Website: https://www.wael.name
@@ -14,8 +14,8 @@
 # ██║ ╚═╝ ██║   ██║          ██║   ██║  ██║███████╗██║ ╚═╝ ██║███████╗
 # ╚═╝     ╚═╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚══════╝
 #
-#                        Version v1.0.6 - Wael Isa
-#                 THE TRUE FINAL MASTERPIECE - SET -E REMOVED
+#                        Version v1.0.7 - Wael Isa
+#              COMPLETE AUTO-INSTALL & AUTO-CREATE EDITION
 #
 # Description: Dynamic wallpaper and system theme engine with WallHaven integration,
 #              lockscreen synchronization, and full Gum-based TUI.
@@ -24,11 +24,11 @@
 # Features:
 #   • Interactive menu by default (just run ./my-theme.sh)
 #   • 100% self-contained - everything in one file
-#   • ABSOLUTELY GUARANTEED to never exit silently
-#   • Fixed set -e causing silent exits on conditional checks
-#   • Creates missing directories without exiting
-#   • Checks for gum and offers to install if missing
-#   • Automatic error recovery and diagnostics
+#   • AUTO-CREATES missing profiles when switching
+#   • AUTO-INSTALLS all dependencies on first run
+#   • AUTO-CREATES wallpaper directories
+#   • AUTO-CREATES default hooks
+#   • Creates missing configuration files
 #   • Lockscreen synchronization (betterlockscreen & hyprlock)
 #   • WallHaven API integration with secure key storage
 #   • Terminal image preview (Sixel/Kitty support)
@@ -43,9 +43,11 @@
 #   • Debounced folder watcher with deep sleep
 #
 # Changelog:
-#   v1.0.6 - CRITICAL FIX: Removed 'set -e' to prevent silent exits
-#            Conditional checks now work as intended
-#            Script no longer dies on false conditions
+#   v1.0.7 - ADDED: Auto-create missing profiles
+#            ADDED: Full auto-install on first run
+#            ADDED: Auto-create all missing directories and files
+#            FIXED: Profile not found error now creates profile
+#   v1.0.6 - Removed set -e to prevent silent exits
 #   v1.0.5 - Fixed banner double-print issue
 #   v1.0.4 - Added auto-install prompt for gum
 #   v1.0.3 - Removed all fatal exits before menu
@@ -56,11 +58,10 @@
 #############################################################################################################################
 
 # ==================== CONFIGURATION ====================
-# CRITICAL FIX: Removed 'e' to allow conditional checks to fail gracefully
 set -uo pipefail
 
 # Version
-SCRIPT_VERSION="v1.0.6"
+SCRIPT_VERSION="v1.0.7"
 SCRIPT_NAME=$(basename "$0")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -91,6 +92,7 @@ BROWSER_CSS="${CACHE_DIR}/browser_shared.css"
 LAST_ACTIVE_PROFILE="${CACHE_DIR}/last_active_profile"
 WALLHAVEN_CONFIG="${CONFIG_DIR}/wallhaven.conf"
 API_KEY_FILE="${CONFIG_DIR}/api.key"
+FIRST_RUN_FILE="${CACHE_DIR}/first_run_complete"
 
 # Cache settings
 WEATHER_CACHE_AGE=900  # 15 minutes
@@ -149,7 +151,6 @@ else
 fi
 
 # ==================== IMMEDIATE FEEDBACK ====================
-# This runs IMMEDIATELY when script starts - but only ONCE
 echo -e "${CYAN}${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}${BOLD}║     My Theme Engine ${SCRIPT_VERSION} - Initializing...           ║${NC}"
 echo -e "${CYAN}${BOLD}╚════════════════════════════════════════════════════════════════╝${NC}"
@@ -160,6 +161,143 @@ mkdir -p "${CONFIG_DIR}" "${CACHE_DIR}" "${GRADIENCE_DIR}" "${HOOKS_DIR}" \
          "${THUMBNAILS_DIR}" "${WALLHAVEN_DIR}" "${WALLHAVEN_IMAGE_CACHE}" \
          "${DESKTOP_ENTRY_DIR}" "${SYSTEMD_USER_DIR}" 2>/dev/null || {
     echo -e "${YELLOW}⚠️  Warning: Could not create some directories${NC}" >&2
+}
+
+# ==================== AUTO-INSTALL FUNCTION ====================
+# This runs on first start to ensure everything is set up
+auto_install() {
+    # Skip if already run
+    if [[ -f "$FIRST_RUN_FILE" ]]; then
+        return 0
+    fi
+
+    echo -e "${CYAN}ℹ️  First run detected - Setting up everything...${NC}"
+
+    # Check and install dependencies
+    local deps_installed=false
+
+    # Check for gum
+    if ! command -v gum >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  Gum not found - installing...${NC}"
+        if command -v apt >/dev/null 2>&1; then
+            echo "deb [trusted=yes] https://repo.charm.sh/apt/ /" | sudo tee /etc/apt/sources.list.d/charm.list >/dev/null 2>&1
+            sudo apt update && sudo apt install -y gum
+            deps_installed=true
+        elif command -v pacman >/dev/null 2>&1; then
+            if command -v yay >/dev/null 2>&1; then
+                yay -S --noconfirm gum
+            else
+                sudo pacman -S --noconfirm gum
+            fi
+            deps_installed=true
+        elif command -v dnf >/dev/null 2>&1; then
+            sudo dnf install -y gum
+            deps_installed=true
+        else
+            # Manual install
+            curl -L https://github.com/charmbracelet/gum/releases/download/v0.14.0/gum_0.14.0_linux_x86_64.tar.gz | tar xz
+            sudo mv gum_*/gum /usr/local/bin/ 2>/dev/null || true
+            rm -rf gum_*
+            deps_installed=true
+        fi
+    fi
+
+    # Check for ImageMagick
+    if ! command -v magick >/dev/null 2>&1 && ! command -v convert >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  ImageMagick not found - installing...${NC}"
+        if command -v apt >/dev/null 2>&1; then
+            sudo apt install -y imagemagick
+        elif command -v pacman >/dev/null 2>&1; then
+            sudo pacman -S --noconfirm imagemagick
+        elif command -v dnf >/dev/null 2>&1; then
+            sudo dnf install -y ImageMagick
+        fi
+        deps_installed=true
+    fi
+
+    # Check for inotify-tools (for watcher)
+    if ! command -v inotifywait >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  inotify-tools not found - installing...${NC}"
+        if command -v apt >/dev/null 2>&1; then
+            sudo apt install -y inotify-tools
+        elif command -v pacman >/dev/null 2>&1; then
+            sudo pacman -S --noconfirm inotify-tools
+        elif command -v dnf >/dev/null 2>&1; then
+            sudo dnf install -y inotify-tools
+        fi
+        deps_installed=true
+    fi
+
+    # Create default wallpaper directories and sample wallpaper notice
+    mkdir -p "${WALLPAPER_DIR}"/{clear,rainy,cloudy,snowy,foggy,stormy,night,general} 2>/dev/null
+
+    # Create a notice file about adding wallpapers
+    if [[ ! -f "${WALLPAPER_DIR}/README.txt" ]]; then
+        cat > "${WALLPAPER_DIR}/README.txt" << EOF
+MY THEME ENGINE - WALLPAPER DIRECTORY
+
+Please add your wallpapers to these folders:
+- clear/      - Sunny/clear weather wallpapers
+- rainy/      - Rainy weather wallpapers
+- cloudy/     - Cloudy weather wallpapers
+- snowy/      - Snowy weather wallpapers
+- foggy/      - Foggy weather wallpapers
+- stormy/     - Stormy weather wallpapers
+- night/      - Night time wallpapers
+- general/    - General/default wallpapers
+
+You can also use WallHaven to download wallpapers automatically!
+EOF
+    fi
+
+    # Create default profiles
+    for profile in work gaming relax web; do
+        if [[ ! -d "${PROFILES_DIR}/${profile}" ]]; then
+            mkdir -p "${PROFILES_DIR}/${profile}"
+            echo "$WALLPAPER_DIR" > "${PROFILES_DIR}/${profile}/wallpaper_dir.txt"
+            echo "NIGHT_OVERRIDE=20" > "${PROFILES_DIR}/${profile}/settings.conf"
+        fi
+    done
+
+    # Create default profile rules
+    if [[ ! -f "${PROFILE_RULES_DIR}/work.conf" ]]; then
+        cat > "${PROFILE_RULES_DIR}/work.conf" << EOF
+# Auto-switch to work profile when these apps are running
+APP_PATTERN="code|idea|pycharm|eclipse"
+PROFILE_NAME="work"
+EOF
+    fi
+
+    if [[ ! -f "${PROFILE_RULES_DIR}/gaming.conf" ]]; then
+        cat > "${PROFILE_RULES_DIR}/gaming.conf" << EOF
+# Auto-switch to gaming profile when these apps are running
+APP_PATTERN="steam|hl2_linux|dota2|cstrike|teamspeak"
+PROFILE_NAME="gaming"
+EOF
+    fi
+
+    if [[ ! -f "${PROFILE_RULES_DIR}/web.conf" ]]; then
+        cat > "${PROFILE_RULES_DIR}/web.conf" << EOF
+# Auto-switch to web profile when these apps are running
+APP_PATTERN="firefox|chrome|chromium|brave|opera"
+PROFILE_NAME="web"
+EOF
+    fi
+
+    # Create default hooks
+    create_lockscreen_hook
+    create_terminal_preview_hook
+    create_spicetify_hook
+
+    # Mark first run as complete
+    date > "$FIRST_RUN_FILE"
+
+    echo -e "${GREEN}✅ First-time setup complete!${NC}"
+
+    if [[ "$deps_installed" == true ]]; then
+        echo -e "${YELLOW}⚠️  Some dependencies were installed. Please restart the script.${NC}"
+        exit 0
+    fi
 }
 
 # ==================== CORE FUNCTIONS ====================
@@ -960,6 +1098,42 @@ check_and_switch_profile() {
     fi
 }
 
+# ==================== AUTO-CREATE PROFILE ====================
+# This function creates a profile if it doesn't exist
+ensure_profile_exists() {
+    local profile="$1"
+
+    # Default profile always exists
+    if [[ "$profile" == "default" ]]; then
+        return 0
+    fi
+
+    local dir="${PROFILES_DIR}/${profile}"
+
+    # Create profile if it doesn't exist
+    if [[ ! -d "$dir" ]]; then
+        print_info "Creating missing profile: $profile"
+        mkdir -p "$dir"
+
+        # Ask for wallpaper directory or use default
+        if command -v gum >/dev/null 2>&1 && [[ -t 0 ]]; then
+            local wall_dir
+            wall_dir=$(gum input --placeholder "Wallpaper directory for $profile profile" --value "$WALLPAPER_DIR")
+            echo "$wall_dir" > "${dir}/wallpaper_dir.txt"
+
+            local night
+            night=$(gum input --placeholder "Night override hour for $profile" --value "$NIGHT_OVERRIDE")
+            echo "NIGHT_OVERRIDE=$night" > "${dir}/settings.conf"
+        else
+            # Non-interactive mode - use defaults
+            echo "$WALLPAPER_DIR" > "${dir}/wallpaper_dir.txt"
+            echo "NIGHT_OVERRIDE=$NIGHT_OVERRIDE" > "${dir}/settings.conf"
+        fi
+
+        print_success "Created profile: $profile"
+    fi
+}
+
 create_profile() {
     local name="$1"
     local dir="${PROFILES_DIR}/${name}"
@@ -1001,6 +1175,10 @@ EOF
 
 switch_profile() {
     local profile="$1" skip="${2:-}"
+
+    # Auto-create profile if it doesn't exist
+    ensure_profile_exists "$profile"
+
     local dir="${PROFILES_DIR}/${profile}"
 
     if [[ "$profile" == "default" ]]; then
@@ -1008,7 +1186,6 @@ switch_profile() {
         CURRENT_THEME_PROFILE="default"
         WALLPAPER_DIR="${HOME}/Pictures/Wallpapers"
     else
-        [[ ! -d "$dir" ]] && error_exit "Profile not found: $profile"
         echo "$profile" > "$CURRENT_PROFILE"
         CURRENT_THEME_PROFILE="$profile"
         [[ -f "$dir/settings.conf" ]] && source "$dir/settings.conf"
@@ -1479,21 +1656,15 @@ snapshot_gallery() {
 }
 
 # ==================== MAIN MENU FUNCTION ====================
-# This is the main entry point for the interactive menu
 gum_main_menu() {
-    # Print banner once at startup
     print_banner
 
-    # Main menu loop - this keeps the menu alive FOREVER until user chooses Exit
     while true; do
-        # Check for auto profile switching
         [[ "$AUTO_PROFILE_SWITCHING" == true ]] && check_and_switch_profile
 
-        # Show current profile in header
         local prof_ind=""
         [[ "$CURRENT_THEME_PROFILE" != "default" ]] && prof_ind=" [Profile: ${CURRENT_THEME_PROFILE}]"
 
-        # Display the main menu
         local choice
         choice=$(gum choose \
             --header="🎨 My Theme Engine ${SCRIPT_VERSION}${prof_ind}" \
@@ -1521,7 +1692,6 @@ gum_main_menu() {
             "🔍 Diagnostics" \
             "❌ Exit")
 
-        # Handle menu choices
         case "$choice" in
             *"Weather"*)
                 CITY=$(gum input --placeholder "City" --value "$CITY")
@@ -1656,7 +1826,6 @@ gum_main_menu() {
                 ;;
         esac
 
-        # Always return to menu automatically - no prompt needed
         echo
         sleep 1
     done
@@ -1674,8 +1843,8 @@ print_banner() {
 ║   ██║ ╚═╝ ██║   ██║          ██║   ██║  ██║███████╗██║ ╚═╝ ██║███████╗       ║
 ║   ╚═╝     ╚═╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚══════╝       ║
 ║                                                                               ║
-║                        Version v1.0.6 - Wael Isa                             ║
-║                 THE TRUE FINAL MASTERPIECE - SET -E REMOVED                   ║
+║                        Version v1.0.7 - Wael Isa                             ║
+║              COMPLETE AUTO-INSTALL & AUTO-CREATE EDITION                      ║
 ║                                                                               ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 EOF
@@ -1733,7 +1902,6 @@ EOF
 }
 
 # ==================== MAIN FUNCTION ====================
-# This handles all non-interactive commands
 main() {
     local mode="random"
     local interval=30
@@ -1792,13 +1960,10 @@ main() {
     create_terminal_preview_hook 2>/dev/null || true
     create_spicetify_hook 2>/dev/null || true
 
-    # CRITICAL FIX: Handle interactive mode IMMEDIATELY
+    # Handle interactive mode
     if [[ "$interactive_mode" == true ]]; then
-        # Check if gum is installed
         if command -v gum >/dev/null 2>&1; then
-            # Launch the menu - this will run FOREVER until user chooses Exit
             gum_main_menu
-            # We should never reach here unless menu exits
             exit 0
         else
             print_error "Gum is required for interactive mode"
@@ -1822,40 +1987,23 @@ main() {
 }
 
 # ==================== MASTER ENTRY POINT ====================
-# This is the ONLY code that runs when script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    # If no arguments, go to interactive mode with gum check
+    # Run auto-install on first start (unless running install-deps)
+    if [[ ! -f "$FIRST_RUN_FILE" ]] && [[ "$*" != *"--install-deps"* ]] && [[ "$*" != *"--help"* ]] && [[ "$*" != *"-h"* ]]; then
+        auto_install
+    fi
+
+    # If no arguments, go to interactive mode
     if [[ $# -eq 0 ]]; then
-        # Check if gum is installed, offer to install if missing
+        # Check if gum is installed
         if ! command -v gum >/dev/null 2>&1; then
             echo -e "${YELLOW}╔════════════════════════════════════════════════════════════════╗${NC}"
-            echo -e "${YELLOW}║     Gum not found - required for interactive menu               ║${NC}"
+            echo -e "${YELLOW}║     Gum not found - running auto-install...                     ║${NC}"
             echo -e "${YELLOW}╚════════════════════════════════════════════════════════════════╝${NC}"
-            echo
-            echo "Would you like to install dependencies now? (y/N)"
-            read -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                # Run install-deps
-                main --install-deps
-                # After install, check again and go to menu if successful
-                if command -v gum >/dev/null 2>&1; then
-                    main --interactive
-                else
-                    echo -e "${RED}Failed to install gum. Please install manually.${NC}"
-                    exit 1
-                fi
-            else
-                echo -e "${RED}Cannot continue without gum. Exiting.${NC}"
-                echo -e "${CYAN}Run with --install-deps to install dependencies${NC}"
-                exit 1
-            fi
-        else
-            # Gum is installed, go to menu directly
-            main --interactive
+            auto_install
         fi
+        main --interactive
     else
-        # Arguments provided - pass them to main
         main "$@"
     fi
 fi
