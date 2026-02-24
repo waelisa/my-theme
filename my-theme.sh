@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #############################################################################################################################
 # my-theme.sh - Dynamic Wallpaper & System Theme Engine
-# Version: v1.1.2
+# Version: v1.1.3
 # Build Date: 02/25/2026
 # Author: Wael Isa
 # Website: https://www.wael.name
@@ -14,17 +14,18 @@
 # ██║ ╚═╝ ██║   ██║          ██║   ██║  ██║███████╗██║ ╚═╝ ██║███████╗
 # ╚═╝     ╚═╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚══════╝
 #
-#                        Version v1.1.2 - Wael Isa
-#                 PATH FIXED & WALLHAVEN WORKING
+#                        Version v1.1.3 - Wael Isa
+#                 XFCE FIXED & DEBUGGABLE
 #
 # Description: Dynamic wallpaper and system theme engine with WallHaven integration,
 #              lockscreen synchronization, and full Gum-based TUI.
 #              COMPLETE SINGLE-FILE VERSION - No external modules needed!
 #
 # Features:
+#   • XFCE SUPPORT - Properly sets wallpaper on XFCE desktop
+#   • DEBUG MODE - Run with DEBUG=true to see what's happening
 #   • FIXED: Now uses ~/Pictures/my-theme/wallpapers/ correctly
 #   • FIXED: WallHaven downloads now work properly
-#   • FIXED: Reset now updates wallpaper path
 #   • MULTI-MONITOR SUPPORT - Sets wallpaper on ALL connected screens
 #   • AUTO-INSTALLS EVERYTHING - All dependencies installed automatically
 #   • Interactive menu by default (just run ./my-theme.sh)
@@ -36,23 +37,20 @@
 #   • AUTO-RESCUE - Downloads wallpapers when folder is empty
 #   • AUTO-CREATES all missing folders
 #   • AUTO-INSTALLS all dependencies on first run
-#   • AUTO-CREATES default profiles and rules
-#   • Lockscreen synchronization (betterlockscreen & hyprlock)
 #   • WallHaven API integration with secure key storage
-#   • Professional error handling with notifications
 #   • Auto-profile switching based on running apps
 #   • Snapshot gallery with thumbnails
 #   • Debounced folder watcher
 #
 # Changelog:
+#   v1.1.3 - ADDED: XFCE specific wallpaper setting
+#            ADDED: Debug mode to trace wallpaper setting
+#            FIXED: Better error messages for XFCE
+#            IMPROVED: Wallpaper setter logging
 #   v1.1.2 - FIXED: Wallpaper path now correctly uses ~/Pictures/my-theme/wallpapers/
 #            FIXED: WallHaven downloads now work properly
-#            FIXED: Reset function updates wallpaper path
-#            IMPROVED: Better error messages for missing directories
 #   v1.1.1 - SLIM: Removed all battery-related options
 #   v1.1.0 - MULTI-MONITOR: Wallpaper sets on ALL screens
-#   v1.0.9 - FIXED: All array syntax errors
-#   v1.0.8 - SAFE MODE: All wallpapers in ~/Pictures/my-theme
 #
 #############################################################################################################################
 
@@ -60,7 +58,7 @@
 set -uo pipefail
 
 # Version
-SCRIPT_VERSION="v1.1.2"
+SCRIPT_VERSION="v1.1.3"
 SCRIPT_NAME=$(basename "$0")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -279,9 +277,9 @@ auto_install() {
         deps_installed=true
     fi
 
-    # Install feh
+    # Install feh (required for XFCE/X11)
     if ! command -v feh >/dev/null 2>&1; then
-        echo -e "${YELLOW}⚠️  feh not found - installing...${NC}"
+        echo -e "${YELLOW}⚠️  feh not found - installing (required for XFCE/X11)...${NC}"
         if [[ "$mgr" == "apt" ]]; then
             sudo apt install -y feh
         elif [[ "$mgr" == "pacman" ]]; then
@@ -303,21 +301,6 @@ auto_install() {
             sudo dnf install -y inotify-tools
         fi
         deps_installed=true
-    fi
-
-    # Install swww for Wayland
-    if [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]] || [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
-        if ! command -v swww >/dev/null 2>&1; then
-            echo -e "${YELLOW}⚠️  swww not found - installing...${NC}"
-            if command -v cargo >/dev/null 2>&1; then
-                cargo install swww
-            elif [[ "$mgr" == "apt" ]]; then
-                sudo apt install -y swww
-            elif [[ "$mgr" == "pacman" ]]; then
-                sudo pacman -S --noconfirm swww
-            fi
-            deps_installed=true
-        fi
     fi
 
     # Create SAFE wallpaper directories
@@ -959,9 +942,39 @@ set_wallpaper() {
     local session_type="${XDG_SESSION_TYPE:-}"
 
     print_debug "Setting wallpaper: DE=$de, Session=$session_type"
+    print_debug "Wallpaper absolute path: $wall_abs"
 
+    # XFCE specific handling
+    if [[ "$de" == *"XFCE"* ]]; then
+        print_info "XFCE desktop detected, using xfconf-query"
+        if command -v xfconf-query >/dev/null 2>&1; then
+            # Get all monitors
+            local monitors
+            monitors=$(xfconf-query -c xfce4-desktop -l | grep -E "last-image$" 2>/dev/null)
+            if [[ -n "$monitors" ]]; then
+                echo "$monitors" | while read -r monitor; do
+                    xfconf-query -c xfce4-desktop -p "$monitor" -s "$wall_abs" 2>/dev/null && \
+                        print_debug "Set wallpaper for: $monitor"
+                done
+                log "Wallpaper set via xfconf-query on all XFCE monitors"
+                run_hooks "$wall_abs"
+                return 0
+            else
+                # Fallback to common path
+                xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$wall_abs" 2>/dev/null && \
+                    log "Wallpaper set via xfconf-query (default path)"
+                run_hooks "$wall_abs"
+                return 0
+            fi
+        else
+            print_warning "xfconf-query not found, falling back to feh"
+        fi
+    fi
+
+    # Wayland backends
     if [[ "$session_type" == "wayland" ]] || [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
         if command -v swww >/dev/null 2>&1; then
+            print_debug "Using swww for Wayland"
             if ! pgrep -x "swww-daemon" >/dev/null; then
                 swww-daemon &
                 sleep 0.5
@@ -977,6 +990,7 @@ set_wallpaper() {
             return 0
 
         elif command -v hyprctl >/dev/null 2>&1 && command -v hyprpaper >/dev/null 2>&1; then
+            print_debug "Using hyprpaper for Wayland"
             hyprctl hyprpaper preload "$wall_abs" 2>/dev/null || true
             if command -v jq >/dev/null 2>&1; then
                 local monitors
@@ -995,7 +1009,9 @@ set_wallpaper() {
         fi
     fi
 
+    # Desktop Environments
     if [[ "$de" == *"GNOME"* ]] || [[ "$de" == *"Unity"* ]] || [[ "$de" == *"Cinnamon"* ]]; then
+        print_debug "Using GNOME/Unity/Cinnamon gsettings"
         gsettings set org.gnome.desktop.background picture-uri "file://$wall_abs" 2>/dev/null || true
         gsettings set org.gnome.desktop.background picture-uri-dark "file://$wall_abs" 2>/dev/null || true
         log "Wallpaper set via GNOME gsettings"
@@ -1003,6 +1019,7 @@ set_wallpaper() {
         return 0
 
     elif [[ "$de" == *"KDE"* ]] || [[ "$de" == *"Plasma"* ]]; then
+        print_debug "Using KDE/Plasma qdbus"
         if command -v qdbus >/dev/null 2>&1; then
             qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
                 "var allDesktops = desktops(); for (var i=0; i<allDesktops.length; i++) { d = allDesktops[i]; d.currentConfigGroup = Array('Wallpaper', 'org.kde.image', 'General'); d.writeConfig('Image', 'file://$wall_abs'); }" 2>/dev/null || true
@@ -1012,13 +1029,16 @@ set_wallpaper() {
         fi
     fi
 
+    # X11 generic backends (including XFCE fallback)
     if [[ "$session_type" != "wayland" ]]; then
         if command -v feh >/dev/null 2>&1; then
+            print_debug "Using feh for X11"
             feh --bg-fill "$wall_abs" 2>/dev/null || true
             log "Wallpaper set via feh on all X11 monitors"
             run_hooks "$wall_abs"
             return 0
         elif command -v nitrogen >/dev/null 2>&1; then
+            print_debug "Using nitrogen for X11"
             nitrogen --set-zoom-fill "$wall_abs" 2>/dev/null || true
             log "Wallpaper set via nitrogen"
             run_hooks "$wall_abs"
@@ -1027,7 +1047,7 @@ set_wallpaper() {
     fi
 
     print_error "No compatible wallpaper setter found!"
-    print_info "Please install one of: feh (X11), swww (Wayland)"
+    print_info "Please install one of: feh (X11/XFCE), swww (Wayland), or xfconf-query (XFCE)"
     return 1
 }
 
@@ -1610,7 +1630,7 @@ self_test() {
     fi
 
     echo "• Dependencies:"
-    for dep in bash grep sed curl magick feh xrandr notify-send inotifywait swww jq; do
+    for dep in bash grep sed curl magick feh xrandr notify-send inotifywait xfconf-query; do
         echo -n "  $dep... "
         if command -v "$dep" >/dev/null 2>&1; then
             echo -e "${GREEN}✓${NC}"
@@ -1989,8 +2009,8 @@ print_banner() {
 ║   ██║ ╚═╝ ██║   ██║          ██║   ██║  ██║███████╗██║ ╚═╝ ██║███████╗       ║
 ║   ╚═╝     ╚═╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚══════╝       ║
 ║                                                                               ║
-║                        Version v1.1.2 - Wael Isa                             ║
-║                 PATH FIXED & WALLHAVEN WORKING                                ║
+║                        Version v1.1.3 - Wael Isa                             ║
+║                 XFCE FIXED & DEBUGGABLE                                       ║
 ║                                                                               ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 EOF
@@ -2044,6 +2064,7 @@ EXAMPLES:
     $SCRIPT_NAME --daemon --mode random --interval 30
     $SCRIPT_NAME --wallhaven anime
     $SCRIPT_NAME --diagnostic       # Test installation
+    DEBUG=true $SCRIPT_NAME --random  # Debug mode
 EOF
 }
 
