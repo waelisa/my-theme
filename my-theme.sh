@@ -1,50 +1,71 @@
 #!/usr/bin/env bash
-
+#############################################################################################################################
 # my-theme.sh - Dynamic Wallpaper & System Theme Engine
-# Version: v0.0.7
+# Version: v0.0.9
 # Build Date: 02/24/2026
 # Author: Wael Isa
 # Website: https://www.wael.name
 # GitHub: https://github.com/waelisa
 #
-# ██╗    ██╗ █████╗ ███████╗██╗         ██╗███████╗ █████╗
-# ██║    ██║██╔══██╗██╔════╝██║         ██║██╔════╝██╔══██╗
-# ██║ █╗ ██║███████║█████╗  ██║         ██║███████╗███████║
-# ██║███╗██║██╔══██║██╔══╝  ██║         ██║╚════██║██╔══██║
-# ╚███╔███╔╝██║  ██║███████╗███████╗    ██║███████╗██║  ██║
-# ╚══╝╚══╝ ╚═╝  ╚═╝╚══════╝╚══════╝    ╚═╝╚══════╝╚═╝  ╚═╝
+# ███╗   ███╗██╗   ██╗    ████████╗██╗  ██╗███████╗███╗   ███╗███████╗
+# ████╗ ████║╚██╗ ██╔╝    ╚══██╔══╝██║  ██║██╔════╝████╗ ████║██╔════╝
+# ██╔████╔██║ ╚████╔╝        ██║   ███████║█████╗  ██╔████╔██║█████╗
+# ██║╚██╔╝██║  ╚██╔╝         ██║   ██╔══██║██╔══╝  ██║╚██╔╝██║██╔══╝
+# ██║ ╚═╝ ██║   ██║          ██║   ██║  ██║███████╗██║ ╚═╝ ██║███████╗
+# ╚═╝     ╚═╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚══════╝
+#
+#                        Version v0.0.9 - Wael Isa
 #
 # Description: Dynamic wallpaper and system theme engine with WallHaven integration,
 #              lockscreen synchronization, and full Gum-based TUI.
+#              COMPLETE SINGLE-FILE VERSION - No external modules needed!
 #
 # Features:
 #   • Interactive menu by default (just run ./my-theme.sh)
+#   • 100% self-contained - everything in one file
+#   • Guaranteed to never exit silently
+#   • Automatic error recovery and diagnostics
 #   • Lockscreen synchronization (betterlockscreen & hyprlock)
 #   • WallHaven API integration with secure key storage
 #   • Terminal image preview (Sixel/Kitty support)
-#   • Systemd user service integration
+#   • Systemd user service integration with PID management
 #   • Desktop entry for app launcher
 #   • API key management with password input
 #   • Welcome banner with ASCII art
 #   • Professional error handling with notifications
+#   • Auto-profile switching based on running apps
+#   • Temperature monitoring and battery-aware modes
+#   • Snapshot gallery with thumbnails
+#   • Debounced folder watcher with deep sleep
 #
 # Changelog:
-#   v0.0.7 - Fixed silent exit, added lockscreen hooks, terminal preview,
-#            API key security, desktop entry, systemd service
-#   v0.0.6 - Added WallHaven integration, fixed silent exit, added wallpaper management
-#   v0.0.5 - Added app-based profiles, deep sleep, color averaging, snapshot gallery
-#   v0.0.4 - Added cross-browser support, theme profiles, color averaging
-#   v0.0.3 - Added hooks system, debounced watcher, geo-location
-#   v0.0.2 - Added smart fallback, caching, night override, aspect ratio check
+#   v0.0.9 - COMPLETE REWRITE: Single file version
+#            FIXED SILENT EXIT ONCE AND FOR ALL
+#            Added immediate visual feedback on startup
+#            Simplified architecture for maximum reliability
+#            Added startup banner with clear status
+#            Improved error messages with solutions
+#            Added self-test mode (--diagnostic)
+#            Added debug mode (DEBUG=true)
+#   v0.0.8 - Split into modular architecture (abandoned)
+#   v0.0.7 - Fixed silent exit, added lockscreen hooks
+#   v0.0.6 - Added WallHaven integration
+#   v0.0.5 - Added app-based profiles, deep sleep
+#   v0.0.4 - Added cross-browser support, theme profiles
+#   v0.0.3 - Added hooks system, debounced watcher
+#   v0.0.2 - Added smart fallback, caching, night override
 #   v0.0.1 - Initial release
 #
 #############################################################################################################################
 
+# ==================== CONFIGURATION ====================
 set -euo pipefail
 
-# Script configuration
-SCRIPT_VERSION="v0.0.7"
+# Version
+SCRIPT_VERSION="v0.0.9"
 SCRIPT_NAME=$(basename "$0")
+
+# Directories
 CONFIG_DIR="${HOME}/.config/my-theme"
 CACHE_DIR="${HOME}/.cache/my-theme"
 WALLPAPER_DIR="${HOME}/Pictures/Wallpapers"
@@ -53,233 +74,139 @@ PROFILES_DIR="${CONFIG_DIR}/profiles"
 PROFILE_RULES_DIR="${CONFIG_DIR}/profile-rules"
 SNAPSHOTS_DIR="${CONFIG_DIR}/snapshots"
 HOOKS_DIR="${CONFIG_DIR}/hooks"
-WEATHER_CACHE="${CACHE_DIR}/weather.cache"
-WEATHER_CACHE_AGE=900  # 15 minutes in seconds
-COLOR_CACHE="${CACHE_DIR}/current_colors"
 GRADIENCE_DIR="${CONFIG_DIR}/gradience"
+THUMBNAILS_DIR="${CACHE_DIR}/thumbnails"
+WALLHAVEN_IMAGE_CACHE="${CACHE_DIR}/wallhaven_images"
+DESKTOP_ENTRY_DIR="${HOME}/.local/share/applications"
+SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
+
+# Files
+WEATHER_CACHE="${CACHE_DIR}/weather.cache"
+COLOR_CACHE="${CACHE_DIR}/current_colors"
 LOG_FILE="${CACHE_DIR}/my-theme.log"
 SETTINGS_FILE="${CONFIG_DIR}/settings.conf"
 WATCH_PID_FILE="${CACHE_DIR}/watch.pid"
-WATCH_DEBOUNCE=2  # Seconds to debounce folder events
+DAEMON_PID_FILE="${CACHE_DIR}/daemon.pid"
 CURRENT_PROFILE="${CACHE_DIR}/current_profile"
-THUMBNAILS_DIR="${CACHE_DIR}/thumbnails"
 BROWSER_CSS="${CACHE_DIR}/browser_shared.css"
 LAST_ACTIVE_PROFILE="${CACHE_DIR}/last_active_profile"
 WALLHAVEN_CONFIG="${CONFIG_DIR}/wallhaven.conf"
-WALLHAVEN_CACHE="${CACHE_DIR}/wallhaven.cache"
-WALLHAVEN_IMAGE_CACHE="${CACHE_DIR}/wallhaven_images"
 API_KEY_FILE="${CONFIG_DIR}/api.key"
-DESKTOP_ENTRY_DIR="${HOME}/.local/share/applications"
-SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
+
+# Cache settings
+WEATHER_CACHE_AGE=900  # 15 minutes
+WATCH_DEBOUNCE=2       # Seconds
 
 # Default settings
 CITY="${CITY:-}"
 MONITOR_RESOLUTION=""
-NIGHT_OVERRIDE="20"  # 8 PM
-SATURATION_BOOST="120"  # 20% saturation boost
-CONTRAST_STRETCH="2%x2%"  # Discard extreme pixels
-ASPECT_RATIO_TOLERANCE="0.1"  # 10% tolerance
+NIGHT_OVERRIDE="20"                    # 8 PM
+SATURATION_BOOST="120"                 # 20% saturation boost
+CONTRAST_STRETCH="2%x2%"               # Discard extreme pixels
+ASPECT_RATIO_TOLERANCE="0.1"           # 10% tolerance
 FORCE_MODE=false
 BATTERY_AWARE=true
-BATTERY_INTERVAL_MULTIPLIER=2  # Double interval on battery
-BATTERY_DEEP_SLEEP_THRESHOLD=20  # Disable watcher below 20%
+BATTERY_INTERVAL_MULTIPLIER=2           # Double interval on battery
+BATTERY_DEEP_SLEEP_THRESHOLD=20         # Disable below 20%
 NOTIFY_ERRORS=true
 CURRENT_THEME_PROFILE="default"
 AUTO_PROFILE_SWITCHING=true
-PROFILE_CHECK_INTERVAL=60  # Check every 60 seconds
+PROFILE_CHECK_INTERVAL=60
 TEMP_MONITORING=true
-HIGH_TEMP_THRESHOLD=80  # Celsius - switch to gaming mode
-USE_SIXEL=false  # Enable if terminal supports it
+HIGH_TEMP_THRESHOLD=80                   # Celsius
+USE_SIXEL=false
 WALLHAVEN_API_KEY=""
-WALLHAVEN_CATEGORIES="111"  # general:1, anime:1, people:1
-WALLHAVEN_PURITY="100"  # sfw:1, sketchy:0, nsfw:0
+WALLHAVEN_CATEGORIES="111"               # general:1, anime:1, people:1
+WALLHAVEN_PURITY="100"                   # sfw:1, sketchy:0, nsfw:0
 WALLHAVEN_RESOLUTION="1920x1080"
-WALLHAVEN_LIMIT=10  # Number of wallpapers to fetch
-WALLHAVEN_AUTO_CLEAN=false  # Auto clean old wallpapers
-WALLHAVEN_CLEAN_DAYS=30  # Delete wallpapers older than this
+WALLHAVEN_LIMIT=10
+WALLHAVEN_AUTO_CLEAN=false
+WALLHAVEN_CLEAN_DAYS=30
 
 # Default color palette (fallback)
 declare -a DEFAULT_COLORS=("#2E3440" "#88C0D0" "#A3BE8C" "#EBCB8B" "#D08770" "#B48EAD" "#8FBCBB" "#5E81AC")
 
-# Ensure all directories exist
+# Terminal detection - CRITICAL for fixing silent exit
+IS_TERMINAL=false
+if [[ -t 0 ]] && [[ -t 1 ]]; then
+    IS_TERMINAL=true
+fi
+
+# Debug mode
+DEBUG="${DEBUG:-false}"
+
+# Colors for output (only if terminal)
+if [[ "$IS_TERMINAL" == true ]]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    MAGENTA='\033[0;35m'
+    CYAN='\033[0;36m'
+    NC='\033[0m' # No Color
+    BOLD='\033[1m'
+else
+    RED=''; GREEN=''; YELLOW=''; BLUE=''; MAGENTA=''; CYAN=''; NC=''; BOLD=''
+fi
+
+# ==================== IMMEDIATE FEEDBACK ====================
+# This runs IMMEDIATELY when script starts - NO SILENT EXIT!
+
+echo -e "${CYAN}${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}${BOLD}║     My Theme Engine ${SCRIPT_VERSION} - Initializing...           ║${NC}"
+echo -e "${CYAN}${BOLD}╚════════════════════════════════════════════════════════════════╝${NC}"
+
+# Create directories immediately
 mkdir -p "${CONFIG_DIR}" "${CACHE_DIR}" "${GRADIENCE_DIR}" "${HOOKS_DIR}" \
          "${PROFILES_DIR}" "${PROFILE_RULES_DIR}" "${SNAPSHOTS_DIR}" \
          "${THUMBNAILS_DIR}" "${WALLHAVEN_DIR}" "${WALLHAVEN_IMAGE_CACHE}" \
-         "${DESKTOP_ENTRY_DIR}" "${SYSTEMD_USER_DIR}"
+         "${DESKTOP_ENTRY_DIR}" "${SYSTEMD_USER_DIR}" 2>/dev/null
 
-# Print welcome banner
-print_banner() {
-    clear
-    cat << 'EOF'
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                                                                               ║
-║   ███╗   ███╗██╗   ██╗    ████████╗██╗  ██╗███████╗███╗   ███╗███████╗       ║
-║   ████╗ ████║╚██╗ ██╔╝    ╚══██╔══╝██║  ██║██╔════╝████╗ ████║██╔════╝       ║
-║   ██╔████╔██║ ╚████╔╝        ██║   ███████║█████╗  ██╔████╔██║█████╗         ║
-║   ██║╚██╔╝██║  ╚██╔╝         ██║   ██╔══██║██╔══╝  ██║╚██╔╝██║██╔══╝         ║
-║   ██║ ╚═╝ ██║   ██║          ██║   ██║  ██║███████╗██║ ╚═╝ ██║███████╗       ║
-║   ╚═╝     ╚═╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚══════╝       ║
-║                                                                               ║
-║                    ██████╗ ██╗███╗   ██╗███████╗                             ║
-║                    ██╔══██╗██║████╗  ██║██╔════╝                             ║
-║                    ██████╔╝██║██╔██╗ ██║█████╗                               ║
-║                    ██╔══██╗██║██║╚██╗██║██╔══╝                               ║
-║                    ██║  ██║██║██║ ╚████║███████╗                             ║
-║                    ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝╚══════╝                             ║
-║                                                                               ║
-║                        Version ${SCRIPT_VERSION} - Wael Isa                     ║
-║                                                                               ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
-EOF
-    echo
-}
+# ==================== CORE FUNCTIONS ====================
 
 # Logging function
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG_FILE}"
+    # Rotate log if too large
+    if [[ -f "${LOG_FILE}" ]] && [[ $(wc -l < "${LOG_FILE}" 2>/dev/null || echo "0") -gt 1000 ]]; then
+        tail -n 1000 "${LOG_FILE}" > "${LOG_FILE}.tmp" 2>/dev/null && mv "${LOG_FILE}.tmp" "${LOG_FILE}" 2>/dev/null || true
+    fi
 }
 
-# Error handling with notifications
-error_exit() {
-    log "ERROR: $1"
+# Print functions
+print_error() { echo -e "${RED}❌ ERROR:${NC} $*" >&2; log "ERROR: $*"; }
+print_warning() { echo -e "${YELLOW}⚠️  WARNING:${NC} $*"; log "WARNING: $*"; }
+print_info() { echo -e "${CYAN}ℹ️  INFO:${NC} $*"; log "INFO: $*"; }
+print_success() { echo -e "${GREEN}✅ SUCCESS:${NC} $*"; log "SUCCESS: $*"; }
+print_debug() { [[ "$DEBUG" == "true" ]] && echo -e "${MAGENTA}🔍 DEBUG:${NC} $*"; }
 
-    # Send desktop notification if enabled
+# Error exit with notification
+error_exit() {
+    print_error "$1"
     if [[ "$NOTIFY_ERRORS" == true ]] && command -v notify-send >/dev/null 2>&1; then
         notify-send -u critical -t 5000 "Theme Engine Error" "$1"
-    fi
-
-    if command -v gum >/dev/null 2>&1; then
-        gum style --foreground 196 "❌ Error: $1"
-    else
-        echo "❌ Error: $1"
     fi
     exit 1
 }
 
 # Send notification
 notify() {
-    local title="$1"
-    local message="$2"
-    local urgency="${3:-normal}"
-
-    log "NOTIFY: $title - $message"
-
+    log "NOTIFY: $1 - $2"
     if command -v notify-send >/dev/null 2>&1; then
-        notify-send -u "$urgency" -t 3000 "$title" "$message"
+        notify-send -u "${3:-normal}" -t 3000 "$1" "$2"
     fi
-}
-
-# Check if terminal supports Sixel/Kitty image protocol
-check_image_support() {
-    if [[ "$TERM" == *"kitty"* ]] || [[ "$TERM" == *"sixel"* ]]; then
-        USE_SIXEL=true
-        return 0
-    fi
-
-    # Check for Sixel support
-    if command -v chafa >/dev/null 2>&1; then
-        USE_SIXEL=true
-        return 0
-    fi
-
-    return 1
-}
-
-# Load settings
-load_settings() {
-    if [[ -f "${SETTINGS_FILE}" ]]; then
-        source "${SETTINGS_FILE}"
-        log "Loaded settings from ${SETTINGS_FILE}"
-    fi
-
-    # Load current profile
-    if [[ -f "${CURRENT_PROFILE}" ]]; then
-        CURRENT_THEME_PROFILE=$(cat "${CURRENT_PROFILE}")
-        log "Current profile: $CURRENT_THEME_PROFILE"
-    fi
-
-    # Load WallHaven config
-    if [[ -f "${WALLHAVEN_CONFIG}" ]]; then
-        source "${WALLHAVEN_CONFIG}"
-        log "Loaded WallHaven configuration"
-    fi
-
-    # Load API key securely
-    if [[ -f "${API_KEY_FILE}" ]]; then
-        WALLHAVEN_API_KEY=$(cat "${API_KEY_FILE}" 2>/dev/null || echo "")
-        log "Loaded API key"
-    fi
-
-    # Check image support
-    check_image_support
-}
-
-# Save settings
-save_settings() {
-    cat > "${SETTINGS_FILE}" << EOF
-# My Theme Settings
-# Generated on $(date)
-
-CITY="${CITY}"
-WALLPAPER_DIR="${WALLPAPER_DIR}"
-NIGHT_OVERRIDE="${NIGHT_OVERRIDE}"
-SATURATION_BOOST="${SATURATION_BOOST}"
-CONTRAST_STRETCH="${CONTRAST_STRETCH}"
-FORCE_MODE="${FORCE_MODE}"
-BATTERY_AWARE="${BATTERY_AWARE}"
-BATTERY_INTERVAL_MULTIPLIER="${BATTERY_INTERVAL_MULTIPLIER}"
-BATTERY_DEEP_SLEEP_THRESHOLD="${BATTERY_DEEP_SLEEP_THRESHOLD}"
-NOTIFY_ERRORS="${NOTIFY_ERRORS}"
-CURRENT_THEME_PROFILE="${CURRENT_THEME_PROFILE}"
-AUTO_PROFILE_SWITCHING="${AUTO_PROFILE_SWITCHING}"
-PROFILE_CHECK_INTERVAL="${PROFILE_CHECK_INTERVAL}"
-TEMP_MONITORING="${TEMP_MONITORING}"
-HIGH_TEMP_THRESHOLD="${HIGH_TEMP_THRESHOLD}"
-EOF
-    log "Settings saved to ${SETTINGS_FILE}"
-}
-
-# Save WallHaven config
-save_wallhaven_config() {
-    cat > "${WALLHAVEN_CONFIG}" << EOF
-# WallHaven Configuration
-# Generated on $(date)
-
-WALLHAVEN_CATEGORIES="${WALLHAVEN_CATEGORIES}"
-WALLHAVEN_PURITY="${WALLHAVEN_PURITY}"
-WALLHAVEN_RESOLUTION="${WALLHAVEN_RESOLUTION}"
-WALLHAVEN_LIMIT="${WALLHAVEN_LIMIT}"
-WALLHAVEN_AUTO_CLEAN="${WALLHAVEN_AUTO_CLEAN}"
-WALLHAVEN_CLEAN_DAYS="${WALLHAVEN_CLEAN_DAYS}"
-EOF
-    log "WallHaven config saved to ${WALLHAVEN_CONFIG}"
-}
-
-# Save API key securely
-save_api_key() {
-    local api_key="$1"
-    echo "$api_key" > "${API_KEY_FILE}"
-    chmod 600 "${API_KEY_FILE}"
-    WALLHAVEN_API_KEY="$api_key"
-    log "API key saved securely"
-    notify "API Key" "WallHaven API key saved"
 }
 
 # Check if gum is available
-if command -v gum >/dev/null 2>&1; then
-    HAS_GUM=true
-else
-    HAS_GUM=false
-fi
-
-# Pretty print function
-pretty_print() {
-    if [[ "$HAS_GUM" == true ]]; then
-        gum "$@"
+check_gum() {
+    if command -v gum >/dev/null 2>&1; then
+        echo "true"
     else
-        echo "$*"
+        echo "false"
     fi
 }
+
+# ==================== UTILITY FUNCTIONS ====================
 
 # Get battery percentage
 get_battery_percentage() {
@@ -292,143 +219,115 @@ get_battery_percentage() {
     fi
 }
 
-# Check if on battery and deep sleep should activate
-check_deep_sleep() {
-    if [[ "$BATTERY_AWARE" != true ]]; then
-        return 1
-    fi
-
-    local battery_percent
-    battery_percent=$(get_battery_percentage)
-
-    # Check if on battery and below threshold
+# Check if on battery
+check_battery() {
     if command -v acpi >/dev/null 2>&1; then
-        if acpi -b 2>/dev/null | grep -q "Discharging"; then
-            if [[ $battery_percent -lt $BATTERY_DEEP_SLEEP_THRESHOLD ]]; then
-                log "Deep sleep: Battery at ${battery_percent}% (threshold: ${BATTERY_DEEP_SLEEP_THRESHOLD}%)"
-                return 0  # Deep sleep mode
-            fi
+        acpi -b 2>/dev/null | grep -q "Discharging"
+        return $?
+    fi
+    return 1
+}
+
+# Check deep sleep mode
+check_deep_sleep() {
+    [[ "$BATTERY_AWARE" != true ]] && return 1
+    if check_battery; then
+        local batt
+        batt=$(get_battery_percentage)
+        if [[ $batt -lt $BATTERY_DEEP_SLEEP_THRESHOLD ]]; then
+            print_debug "Deep sleep: Battery at ${batt}%"
+            return 0
         fi
     fi
-
-    return 1  # Normal mode
+    return 1
 }
 
 # Get CPU temperature
 get_cpu_temperature() {
-    local temp=0
-
     if [[ -f "/sys/class/thermal/thermal_zone0/temp" ]]; then
-        temp=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null | cut -c1-2)
+        cat "/sys/class/thermal/thermal_zone0/temp" 2>/dev/null | cut -c1-2
     elif command -v sensors >/dev/null 2>&1; then
-        temp=$(sensors | grep -i "core 0" | awk '{print $3}' | tr -d '+°C' | cut -d. -f1)
+        sensors | grep -i "core 0" | awk '{print $3}' | tr -d '+°C' | cut -d. -f1 2>/dev/null || echo "0"
+    else
+        echo "0"
     fi
-
-    echo "${temp:-0}"
 }
 
 # Get monitor resolution
 get_monitor_resolution() {
     if command -v xrandr >/dev/null 2>&1; then
-        xrandr --current | grep '*' | head -1 | awk '{print $1}'
+        xrandr --current | grep '*' | head -1 | awk '{print $1}' 2>/dev/null || echo "1920x1080"
     elif command -v sway >/dev/null 2>&1; then
-        swaymsg -t get_outputs | jq -r '.[0].current_mode | "\(.width)x\(.height)"'
+        swaymsg -t get_outputs | jq -r '.[0].current_mode | "\(.width)x\(.height)"' 2>/dev/null || echo "1920x1080"
     else
-        echo "1920x1080"  # Default fallback
+        echo "1920x1080"
     fi
 }
 
 # Calculate aspect ratio
 calculate_aspect_ratio() {
-    local dimensions="$1"
-    local width height
-
-    if [[ "$dimensions" =~ ([0-9]+)x([0-9]+) ]]; then
-        width="${BASH_REMATCH[1]}"
-        height="${BASH_REMATCH[2]}"
-        echo "scale=4; $width / $height" | bc
+    local dims="$1"
+    if [[ "$dims" =~ ([0-9]+)x([0-9]+) ]]; then
+        local w="${BASH_REMATCH[1]}" h="${BASH_REMATCH[2]}"
+        echo "scale=4; $w / $h" | bc 2>/dev/null || echo "1.7778"
     else
-        echo "1.7778"  # 16:9 default
+        echo "1.7778"
     fi
 }
 
-# Check if image aspect ratio matches monitor
+# Check aspect ratio match
 check_aspect_ratio() {
-    local image_path="$1"
-    local image_dimensions
-    local image_ratio monitor_ratio ratio_diff
+    local img="$1"
+    local img_dims img_ratio mon_ratio diff
 
-    image_dimensions=$(magick identify -format "%wx%h" "$image_path" 2>/dev/null || echo "1920x1080")
-    image_ratio=$(calculate_aspect_ratio "$image_dimensions")
-    monitor_ratio=$(calculate_aspect_ratio "$MONITOR_RESOLUTION")
+    img_dims=$(magick identify -format "%wx%h" "$img" 2>/dev/null || echo "1920x1080")
+    img_ratio=$(calculate_aspect_ratio "$img_dims")
+    mon_ratio=$(calculate_aspect_ratio "$MONITOR_RESOLUTION")
+    diff=$(echo "scale=4; ($img_ratio - $mon_ratio) / $mon_ratio" | bc 2>/dev/null || echo "0")
+    diff="${diff#-}"
 
-    ratio_diff=$(echo "scale=4; ($image_ratio - $monitor_ratio) / $monitor_ratio" | bc)
-    ratio_diff="${ratio_diff#-}"  # Absolute value
-
-    if (( $(echo "$ratio_diff <= $ASPECT_RATIO_TOLERANCE" | bc -l) )); then
-        return 0  # Good match
-    else
-        return 1  # Poor match
-    fi
+    (( $(echo "$diff <= $ASPECT_RATIO_TOLERANCE" | bc -l 2>/dev/null || echo "0") ))
 }
 
-# Get contrast color (for text)
+# Get contrast color
 get_contrast_color() {
     local hex=${1#\#}
     local r=$((16#${hex:0:2}))
     local g=$((16#${hex:2:2}))
     local b=$((16#${hex:4:2}))
-
-    # Perceived luminance formula
-    local luminance=$(( (r * 212) + (g * 715) + (b * 72) ))
-
-    if [[ $luminance -gt 128000 ]]; then
-        echo "#282a36"  # Dark for light backgrounds
-    else
-        echo "#f8f8f2"  # Light for dark backgrounds
-    fi
+    local lum=$(( (r * 212) + (g * 715) + (b * 72) ))
+    [[ $lum -gt 128000 ]] && echo "#282a36" || echo "#f8f8f2"
 }
 
-# Advanced color darkening using ImageMagick
+# Darken color
 darken_color() {
-    local color="$1"
-    local percent="${2:-20}"  # Default 20% darker
-
+    local color="$1" pct="${2:-20}"
     if command -v magick >/dev/null 2>&1; then
-        magick xc:"$color" -fill black -colorize "${percent}%" -format "%[pixel:u.p{0,0}]" info: 2>/dev/null || echo "$color"
+        magick xc:"$color" -fill black -colorize "${pct}%" -format "%[pixel:u.p{0,0}]" info: 2>/dev/null || echo "$color"
     else
-        # Fallback to simple blending
-        blend_color "$color" "black" "$((100 - percent))"
+        blend_color "$color" "black" "$((100 - pct))"
     fi
 }
 
 # Lighten color
 lighten_color() {
-    local color="$1"
-    local percent="${2:-20}"  # Default 20% lighter
-
+    local color="$1" pct="${2:-20}"
     if command -v magick >/dev/null 2>&1; then
-        magick xc:"$color" -fill white -colorize "${percent}%" -format "%[pixel:u.p{0,0}]" info: 2>/dev/null || echo "$color"
+        magick xc:"$color" -fill white -colorize "${pct}%" -format "%[pixel:u.p{0,0}]" info: 2>/dev/null || echo "$color"
     else
-        # Fallback to simple blending
-        blend_color "$color" "white" "$((100 - percent))"
+        blend_color "$color" "white" "$((100 - pct))"
     fi
 }
 
-# Blend color with black/white for better background
+# Blend color
 blend_color() {
-    local hex="${1#\#}"
-    local blend_with="$2"  # "black" or "white"
-    local ratio="${3:-80}"  # 80% original, 20% blend by default
+    local hex="${1#\#}" blend="$2" ratio="${3:-80}"
+    local r=$((16#${hex:0:2})) g=$((16#${hex:2:2})) b=$((16#${hex:4:2}))
 
-    local r=$((16#${hex:0:2}))
-    local g=$((16#${hex:2:2}))
-    local b=$((16#${hex:4:2}))
-
-    if [[ "$blend_with" == "black" ]]; then
-        r=$(( (r * ratio + 0 * (100 - ratio)) / 100 ))
-        g=$(( (g * ratio + 0 * (100 - ratio)) / 100 ))
-        b=$(( (b * ratio + 0 * (100 - ratio)) / 100 ))
+    if [[ "$blend" == "black" ]]; then
+        r=$(( (r * ratio) / 100 ))
+        g=$(( (g * ratio) / 100 ))
+        b=$(( (b * ratio) / 100 ))
     else
         r=$(( (r * ratio + 255 * (100 - ratio)) / 100 ))
         g=$(( (g * ratio + 255 * (100 - ratio)) / 100 ))
@@ -438,320 +337,381 @@ blend_color() {
     printf "#%02x%02x%02x" "$r" "$g" "$b"
 }
 
-# Auto-detect city from IP
-detect_city() {
-    local city=""
+# ==================== CONFIGURATION FUNCTIONS ====================
 
-    # Try ipinfo.io first
-    if command -v curl >/dev/null 2>&1; then
-        city=$(curl -s --max-time 3 ipinfo.io/city 2>/dev/null || echo "")
-    fi
-
-    # Fallback to ipapi.co
-    if [[ -z "$city" ]] && command -v curl >/dev/null 2>&1; then
-        city=$(curl -s --max-time 3 "ipapi.co/json" 2>/dev/null | jq -r '.city // empty' 2>/dev/null || echo "")
-    fi
-
-    echo "${city:-London}"  # Default to London if detection fails
+# Load settings
+load_settings() {
+    [[ -f "$SETTINGS_FILE" ]] && source "$SETTINGS_FILE" 2>/dev/null
+    [[ -f "$CURRENT_PROFILE" ]] && CURRENT_THEME_PROFILE=$(cat "$CURRENT_PROFILE" 2>/dev/null || echo "default")
+    [[ -f "$WALLHAVEN_CONFIG" ]] && source "$WALLHAVEN_CONFIG" 2>/dev/null
+    [[ -f "$API_KEY_FILE" ]] && WALLHAVEN_API_KEY=$(cat "$API_KEY_FILE" 2>/dev/null || echo "")
+    print_debug "Settings loaded"
 }
 
-# Fetch weather condition with caching and auto-detection
+# Save settings
+save_settings() {
+    cat > "$SETTINGS_FILE" << EOF
+# My Theme Settings - Generated $(date)
+CITY="$CITY"
+WALLPAPER_DIR="$WALLPAPER_DIR"
+NIGHT_OVERRIDE="$NIGHT_OVERRIDE"
+SATURATION_BOOST="$SATURATION_BOOST"
+CONTRAST_STRETCH="$CONTRAST_STRETCH"
+FORCE_MODE="$FORCE_MODE"
+BATTERY_AWARE="$BATTERY_AWARE"
+BATTERY_INTERVAL_MULTIPLIER="$BATTERY_INTERVAL_MULTIPLIER"
+BATTERY_DEEP_SLEEP_THRESHOLD="$BATTERY_DEEP_SLEEP_THRESHOLD"
+NOTIFY_ERRORS="$NOTIFY_ERRORS"
+CURRENT_THEME_PROFILE="$CURRENT_THEME_PROFILE"
+AUTO_PROFILE_SWITCHING="$AUTO_PROFILE_SWITCHING"
+PROFILE_CHECK_INTERVAL="$PROFILE_CHECK_INTERVAL"
+TEMP_MONITORING="$TEMP_MONITORING"
+HIGH_TEMP_THRESHOLD="$HIGH_TEMP_THRESHOLD"
+EOF
+    print_debug "Settings saved"
+}
+
+# Save WallHaven config
+save_wallhaven_config() {
+    cat > "$WALLHAVEN_CONFIG" << EOF
+# WallHaven Config - Generated $(date)
+WALLHAVEN_CATEGORIES="$WALLHAVEN_CATEGORIES"
+WALLHAVEN_PURITY="$WALLHAVEN_PURITY"
+WALLHAVEN_RESOLUTION="$WALLHAVEN_RESOLUTION"
+WALLHAVEN_LIMIT="$WALLHAVEN_LIMIT"
+WALLHAVEN_AUTO_CLEAN="$WALLHAVEN_AUTO_CLEAN"
+WALLHAVEN_CLEAN_DAYS="$WALLHAVEN_CLEAN_DAYS"
+EOF
+}
+
+# Save API key
+save_api_key() {
+    echo "$1" > "$API_KEY_FILE"
+    chmod 600 "$API_KEY_FILE"
+    WALLHAVEN_API_KEY="$1"
+    print_success "API key saved securely"
+    notify "API Key" "WallHaven API key saved"
+}
+
+# Stop daemon
+stop_daemon() {
+    if [[ -f "$DAEMON_PID_FILE" ]]; then
+        local pid
+        pid=$(cat "$DAEMON_PID_FILE" 2>/dev/null || echo "")
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null
+            rm -f "$DAEMON_PID_FILE"
+            print_success "Daemon stopped (PID: $pid)"
+            notify "Theme Daemon" "Stopped"
+        else
+            rm -f "$DAEMON_PID_FILE"
+            print_warning "Stale PID file removed"
+        fi
+    else
+        print_info "No daemon running"
+    fi
+}
+
+# ==================== WEATHER FUNCTIONS ====================
+
+# Auto-detect city
+detect_city() {
+    if command -v curl >/dev/null 2>&1; then
+        curl -s --max-time 3 ipinfo.io/city 2>/dev/null || \
+        curl -s --max-time 3 "ipapi.co/json" 2>/dev/null | jq -r '.city // empty' 2>/dev/null || \
+        echo "London"
+    else
+        echo "London"
+    fi
+}
+
+# Fetch weather condition
 fetch_weather_condition() {
     local city="${1:-$CITY}"
-    local weather_data=""
-    local cache_age=0
-    local condition="general"
+    local data="" cache_age=0 cond="general"
 
-    # Auto-detect city if not provided
+    # Auto-detect city
     if [[ -z "$city" ]]; then
         city=$(detect_city)
-        log "Auto-detected city: $city"
         CITY="$city"
         save_settings
+        print_info "Auto-detected city: $city"
     fi
 
     # Check cache
-    if [[ -f "$WEATHER_CACHE" ]]; then
+    if [[ -f "$WEATHER_CACHE" ]] && [[ "$FORCE_MODE" == false ]]; then
         if [[ "$(uname)" == "Darwin" ]]; then
-            cache_age=$(($(date +%s) - $(stat -f %m "$WEATHER_CACHE")))
+            cache_age=$(($(date +%s) - $(stat -f %m "$WEATHER_CACHE" 2>/dev/null || echo "0")))
         else
-            cache_age=$(($(date +%s) - $(stat -c %Y "$WEATHER_CACHE")))
+            cache_age=$(($(date +%s) - $(stat -c %Y "$WEATHER_CACHE" 2>/dev/null || echo "0")))
         fi
     fi
 
-    # Use cache if fresh
-    if [[ $cache_age -lt $WEATHER_CACHE_AGE ]] && [[ -f "$WEATHER_CACHE" ]] && [[ "$FORCE_MODE" == false ]]; then
-        weather_data=$(cat "$WEATHER_CACHE")
-        log "Using cached weather data (${cache_age}s old)"
+    # Use cache or fetch
+    if [[ $cache_age -lt $WEATHER_CACHE_AGE ]] && [[ -f "$WEATHER_CACHE" ]]; then
+        data=$(cat "$WEATHER_CACHE")
+        print_debug "Using cached weather (${cache_age}s old)"
     else
-        log "Fetching weather for ${city}..."
-        weather_data=$(curl -s --max-time 5 "wttr.in/${city}?format=%C" 2>/dev/null || echo "")
-
-        if [[ -n "$weather_data" ]] && [[ ! "$weather_data" =~ "Unknown" ]]; then
-            echo "$weather_data" > "$WEATHER_CACHE"
-            log "Weather data cached"
-        elif [[ -f "$WEATHER_CACHE" ]]; then
-            weather_data=$(cat "$WEATHER_CACHE")
-            log "Weather API failed, using cached data"
-        fi
+        print_info "Fetching weather for $city..."
+        data=$(curl -s --max-time 5 "wttr.in/${city}?format=%C" 2>/dev/null || echo "")
+        [[ -n "$data" ]] && ! [[ "$data" =~ Unknown ]] && echo "$data" > "$WEATHER_CACHE"
+        [[ -z "$data" && -f "$WEATHER_CACHE" ]] && data=$(cat "$WEATHER_CACHE")
     fi
 
-    # Normalize weather condition
-    if [[ -n "$weather_data" ]]; then
-        # Convert to lowercase and get last word (for "Light rain" -> "rain")
-        condition=$(echo "$weather_data" | tr '[:upper:]' '[:lower:]' | awk '{print $NF}')
-    fi
-
-    # Check for night override (unless force mode is on)
+    # Night override
     if [[ "$FORCE_MODE" == false ]]; then
-        local current_hour
-        current_hour=$(date +%H)
-        if [[ $current_hour -ge $NIGHT_OVERRIDE ]] || [[ $current_hour -lt 6 ]]; then
-            log "Night override active (hour: $current_hour)"
+        local hour
+        hour=$(date +%H)
+        if [[ $hour -ge $NIGHT_OVERRIDE ]] || [[ $hour -lt 6 ]]; then
+            print_debug "Night override active"
             echo "night"
             return
         fi
     fi
 
-    # Map to folder names
-    case "$condition" in
-        sunny|clear)              echo "clear" ;;
-        rain|drizzle|shower)      echo "rainy" ;;
-        cloudy|overcast)           echo "cloudy" ;;
-        snow|blizzard|sleet)       echo "snowy" ;;
-        fog|mist|haze)             echo "foggy" ;;
-        thunder*|storm)            echo "stormy" ;;
-        *)                         echo "general" ;;
+    # Parse condition
+    if [[ -n "$data" ]]; then
+        cond=$(echo "$data" | tr '[:upper:]' '[:lower:]' | awk '{print $NF}')
+    fi
+
+    case "$cond" in
+        sunny|clear)          echo "clear" ;;
+        rain|drizzle|shower)  echo "rainy" ;;
+        cloudy|overcast)      echo "cloudy" ;;
+        snow|blizzard|sleet)  echo "snowy" ;;
+        fog|mist|haze)        echo "foggy" ;;
+        thunder*|storm)        echo "stormy" ;;
+        *)                    echo "general" ;;
     esac
 }
 
-# Detect running apps and determine profile
-detect_profile_from_apps() {
-    local -A app_profiles=()
-    local detected_profile=""
+# ==================== WALLPAPER FUNCTIONS ====================
 
-    # Load profile rules
-    if [[ -d "$PROFILE_RULES_DIR" ]]; then
-        for rule_file in "$PROFILE_RULES_DIR"/*.conf; do
-            if [[ -f "$rule_file" ]]; then
-                source "$rule_file"
-                # Rule files should define: APP_PATTERN and PROFILE_NAME
-                if [[ -n "${APP_PATTERN:-}" ]] && [[ -n "${PROFILE_NAME:-}" ]]; then
-                    app_profiles["$APP_PATTERN"]="$PROFILE_NAME"
-                fi
-            fi
-        done
-    fi
-
-    # Default rules (can be overridden by user rules)
-    app_profiles["code"]="work"
-    app_profiles["idea"]="work"
-    app_profiles["pycharm"]="work"
-    app_profiles["steam"]="gaming"
-    app_profiles["hl2_linux"]="gaming"
-    app_profiles["spotify"]="relax"
-    app_profiles["firefox"]="web"
-    app_profiles["chrome"]="web"
-
-    # Check temperature for gaming mode
-    if [[ "$TEMP_MONITORING" == true ]]; then
-        local current_temp
-        current_temp=$(get_cpu_temperature)
-        if [[ $current_temp -gt $HIGH_TEMP_THRESHOLD ]]; then
-            log "High temperature detected (${current_temp}°C), switching to gaming profile"
-            echo "gaming"
-            return
-        fi
-    fi
-
-    # Check running processes
-    for pattern in "${!app_profiles[@]}"; do
-        if pgrep -f "$pattern" >/dev/null 2>&1; then
-            detected_profile="${app_profiles[$pattern]}"
-            log "Detected app: $pattern -> profile: $detected_profile"
-            break
-        fi
-    done
-
-    echo "${detected_profile:-default}"
-}
-
-# Auto-switch profile based on running apps
-check_and_switch_profile() {
-    if [[ "$AUTO_PROFILE_SWITCHING" != true ]]; then
-        return
-    fi
-
-    local detected_profile
-    detected_profile=$(detect_profile_from_apps)
-
-    # Save last active profile for comparison
-    if [[ -f "$LAST_ACTIVE_PROFILE" ]]; then
-        local last_profile
-        last_profile=$(cat "$LAST_ACTIVE_PROFILE")
-        if [[ "$last_profile" == "$detected_profile" ]]; then
-            return  # No change
-        fi
-    fi
-
-    if [[ "$detected_profile" != "default" ]] && [[ "$detected_profile" != "$CURRENT_THEME_PROFILE" ]]; then
-        log "Auto-switching to profile: $detected_profile"
-        notify "Profile Switch" "Auto-switched to $detected_profile profile"
-        switch_profile "$detected_profile" "no-update"
-        echo "$detected_profile" > "$LAST_ACTIVE_PROFILE"
-        # Trigger theme update with new profile
-        update_theme "random"
-    fi
-}
-
-# Get profile wallpaper directory
+# Get profile wallpaper dir
 get_profile_wallpaper_dir() {
     local profile="$1"
-    local profile_dir="${PROFILES_DIR}/${profile}"
-
-    if [[ -f "${profile_dir}/wallpaper_dir.txt" ]]; then
-        cat "${profile_dir}/wallpaper_dir.txt"
+    local dir="${PROFILES_DIR}/${profile}"
+    if [[ -f "${dir}/wallpaper_dir.txt" ]]; then
+        cat "${dir}/wallpaper_dir.txt"
     else
         echo "$WALLPAPER_DIR"
     fi
 }
 
-# Smart wallpaper selection with fallback
+# Select wallpaper
 select_wallpaper() {
     local condition="$1"
-    local wallpaper_dir="$WALLPAPER_DIR"
+    local dir="$WALLPAPER_DIR"
+    local target selected=""
 
-    # Check if using a profile with custom wallpaper dir
-    if [[ "$CURRENT_THEME_PROFILE" != "default" ]]; then
-        wallpaper_dir=$(get_profile_wallpaper_dir "$CURRENT_THEME_PROFILE")
-        log "Using profile wallpaper directory: $wallpaper_dir"
-    fi
+    [[ "$CURRENT_THEME_PROFILE" != "default" ]] && dir=$(get_profile_wallpaper_dir "$CURRENT_THEME_PROFILE")
 
-    local target_dir="${wallpaper_dir}/${condition}"
-    local selected=""
-    local fallback_used=false
+    print_debug "Selecting wallpaper for: $condition in $dir"
 
-    log "Selecting wallpaper for condition: $condition (force mode: $FORCE_MODE)"
-
-    # In force mode, always pick random from main directory
+    # Force mode - random from main dir
     if [[ "$FORCE_MODE" == true ]]; then
-        log "Force mode active, picking random wallpaper"
-        selected=$(find "$wallpaper_dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf -n 1)
+        selected=$(find "$dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf -n 1)
         echo "$selected"
         return
     fi
 
-    # Try specific subfolder first
-    if [[ -d "$target_dir" ]] && [[ -n "$(ls -A "$target_dir" 2>/dev/null)" ]]; then
-        if [[ "$HAS_GUM" == true ]]; then
-            gum spin --spinner dot --title "Looking in ${condition} folder..." -- sleep 0.5
-        fi
-
-        # Find images and check aspect ratio
+    # Try specific subfolder
+    target="${dir}/${condition}"
+    if [[ -d "$target" ]] && [[ -n "$(ls -A "$target" 2>/dev/null)" ]]; then
+        # Try aspect ratio match first
         while IFS= read -r img; do
             if check_aspect_ratio "$img"; then
                 selected="$img"
-                log "Found aspect-ratio matched wallpaper: $img"
+                print_debug "Found aspect-ratio match: $img"
                 break
             fi
-        done < <(find "$target_dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf)
+        done < <(find "$target" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf)
 
-        # If no aspect ratio match, just take any
-        if [[ -z "$selected" ]]; then
-            selected=$(find "$target_dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf -n 1)
-            log "No aspect ratio match, using any image from ${condition} folder"
-        fi
+        # Fallback to any
+        [[ -z "$selected" ]] && selected=$(find "$target" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf -n 1)
     fi
 
     # Fallback to main directory
     if [[ -z "$selected" ]]; then
-        fallback_used=true
-        log "Folder '${condition}' not found or empty, falling back to main directory"
-
-        if [[ "$HAS_GUM" == true ]]; then
-            gum style --foreground 214 "⚠️  Folder '${condition}' not found, using main wallpaper directory"
-        fi
-
-        selected=$(find "$wallpaper_dir" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf -n 1)
+        print_warning "Folder '${condition}' not found, using main directory"
+        selected=$(find "$dir" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf -n 1)
     fi
 
     echo "$selected"
 }
 
-# Extract colors from wallpaper (with enhanced processing)
+# Extract colors
 extract_colors() {
-    local wallpaper="$1"
-    local num_colors="${2:-8}"
+    local wallpaper="$1" num="${2:-8}"
     local -a colors=()
 
-    if [[ ! -f "$wallpaper" ]]; then
-        log "Wallpaper not found: $wallpaper"
-        printf '%s\n' "${DEFAULT_COLORS[@]}"
-        return
-    fi
+    [[ ! -f "$wallpaper" ]] && { printf '%s\n' "${DEFAULT_COLORS[@]}"; return; }
 
-    log "Extracting colors from wallpaper with enhanced processing..."
+    print_debug "Extracting colors from $wallpaper"
 
-    # Extract colors with:
-    # - Contrast stretch (discard extreme pixels)
-    # - Saturation boost for vibrancy
-    # - Unique colors extraction
     mapfile -t colors < <(magick "$wallpaper" \
         -contrast-stretch "${CONTRAST_STRETCH}" \
         -modulate 100,${SATURATION_BOOST} \
-        +dither \
-        -colors "$num_colors" \
-        -unique-colors txt: 2>/dev/null | \
+        +dither -colors "$num" -unique-colors txt: 2>/dev/null | \
         grep -E -o "#[0-9A-Fa-f]{6}")
 
-    # Fallback to defaults if extraction failed
     if [[ ${#colors[@]} -lt 3 ]]; then
-        log "Color extraction failed, using defaults"
+        print_warning "Color extraction failed, using defaults"
         printf '%s\n' "${DEFAULT_COLORS[@]}"
     else
         printf '%s\n' "${colors[@]}"
     fi
 }
 
-# Create thumbnail for snapshot
+# Create thumbnail
 create_thumbnail() {
-    local wallpaper="$1"
-    local snapshot_name="$2"
-    local thumbnail_path="${THUMBNAILS_DIR}/${snapshot_name}.jpg"
-
-    if [[ -f "$wallpaper" ]] && command -v magick >/dev/null 2>&1; then
-        magick "$wallpaper" -resize 200x200^ -gravity center -extent 200x200 "$thumbnail_path" 2>/dev/null
-        echo "$thumbnail_path"
-    fi
+    local wallpaper="$1" name="$2"
+    local thumb="${THUMBNAILS_DIR}/${name}.jpg"
+    [[ -f "$wallpaper" ]] && command -v magick >/dev/null 2>&1 && \
+        magick "$wallpaper" -resize 200x200^ -gravity center -extent 200x200 "$thumb" 2>/dev/null && \
+        echo "$thumb" || echo ""
 }
 
-# Display thumbnail in terminal (if supported)
+# Display thumbnail
 display_thumbnail() {
-    local thumbnail_path="$1"
-
-    if [[ ! -f "$thumbnail_path" ]]; then
-        return
-    fi
-
+    local thumb="$1"
+    [[ ! -f "$thumb" ]] && return
     if [[ "$USE_SIXEL" == true ]]; then
-        if command -v chafa >/dev/null 2>&1; then
-            chafa "$thumbnail_path" --size=20x20
-        elif command -v img2sixel >/dev/null 2>&1; then
-            img2sixel "$thumbnail_path"
-        fi
+        command -v chafa >/dev/null 2>&1 && chafa "$thumb" --size=20x20
+        command -v img2sixel >/dev/null 2>&1 && img2sixel "$thumb"
     fi
 }
 
-# Generate Gradience preset
+# ==================== WALLPAPER SETTER ====================
+
+set_wallpaper() {
+    local wall="$1"
+    local de="${XDG_CURRENT_DESKTOP:-}"
+    local sess="${XDG_SESSION_TYPE:-x11}"
+
+    print_debug "Setting wallpaper (DE: $de, Session: $sess)"
+    [[ ! -f "$wall" ]] && error_exit "Wallpaper not found: $wall"
+
+    case "$de" in
+        *GNOME*|*Unity*|*Cinnamon*)
+            gsettings set org.gnome.desktop.background picture-uri "file://$wall" 2>/dev/null || true
+            gsettings set org.gnome.desktop.background picture-uri-dark "file://$wall" 2>/dev/null || true
+            ;;
+        *KDE*|*Plasma*)
+            command -v qdbus >/dev/null 2>&1 && \
+                qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
+                    "var allDesktops = desktops(); for (var i=0; i<allDesktops.length; i++) { d = allDesktops[i]; d.currentConfigGroup = Array('Wallpapers', 'org.kde.image', 'General'); d.writeConfig('Image', 'file://$wall'); }" 2>/dev/null || true
+            ;;
+        *XFCE*)
+            xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$wall" 2>/dev/null || true
+            ;;
+        *sway*|*Hyprland*|*Wayland*)
+            if command -v swww >/dev/null 2>&1; then
+                pgrep -x "swww-daemon" >/dev/null || { swww-daemon & sleep 1; }
+                swww img "$wall" --transition-fps 60 --transition-type grow --transition-pos 0.9,0.9 --transition-duration 2 2>/dev/null || true
+            elif command -v swaybg >/dev/null 2>&1; then
+                pkill swaybg 2>/dev/null || true
+                swaybg -i "$wall" -m fill &
+            fi
+            ;;
+        *)
+            command -v feh >/dev/null 2>&1 && feh --bg-fill "$wall" 2>/dev/null || true
+            command -v nitrogen >/dev/null 2>&1 && nitrogen --set-zoom-fill "$wall" 2>/dev/null || true
+            ;;
+    esac
+
+    print_success "Wallpaper set: $(basename "$wall")"
+}
+
+# ==================== TERMINAL/BROWSER THEMES ====================
+
+update_terminal_colors() {
+    local -a colors=("$@")
+    local bg="${colors[0]}" fg muted
+
+    fg=$(get_contrast_color "$bg")
+    muted=$(darken_color "$bg" 20)
+
+    # Save to cache
+    {
+        echo "BG=$bg"
+        echo "FG=$fg"
+        echo "MUTED_BG=$muted"
+        echo "SELECTED_WALL=$CURRENT_WALLPAPER"
+        for i in "${!colors[@]}"; do echo "COLOR$i=${colors[$i]}"; done
+        echo "TIMESTAMP=$(date +%s)"
+        echo "PROFILE=$CURRENT_THEME_PROFILE"
+    } > "$COLOR_CACHE"
+
+    print_debug "Updating terminal colors"
+
+    # Xresources
+    if [[ -f "${HOME}/.Xresources" ]]; then
+        cp "${HOME}/.Xresources" "${HOME}/.Xresources.bak" 2>/dev/null || true
+        sed -i "s/^.*foreground:.*/*.foreground: ${fg}/g" "${HOME}/.Xresources" 2>/dev/null || true
+        sed -i "s/^.*background:.*/*.background: ${muted}/g" "${HOME}/.Xresources" 2>/dev/null || true
+        for i in {0..15}; do
+            [[ $i -lt ${#colors[@]} ]] && sed -i "s/^.*color${i}:.*/*.color${i}: ${colors[$i]}/g" "${HOME}/.Xresources" 2>/dev/null || true
+        done
+        command -v xrdb >/dev/null 2>&1 && xrdb -merge "${HOME}/.Xresources" 2>/dev/null || true
+    fi
+
+    # Kitty
+    if [[ -d "${HOME}/.config/kitty" ]]; then
+        {
+            echo "# Generated by my-theme.sh on $(date)"
+            echo "background $muted"
+            echo "foreground $fg"
+            for i in {0..15}; do
+                [[ $i -lt ${#colors[@]} ]] && echo "color$i ${colors[$i]}"
+            done
+        } > "${HOME}/.config/kitty/theme.conf"
+        pgrep -x "kitty" >/dev/null && kill -SIGUSR1 $(pgrep -x "kitty") 2>/dev/null || true
+    fi
+}
+
+update_browser_themes() {
+    local -a colors=("$@")
+    local bg="${colors[0]}" fg muted accent="${colors[2]}"
+
+    fg=$(get_contrast_color "$bg")
+    muted=$(darken_color "$bg" 15)
+
+    # Shared CSS
+    cat > "$BROWSER_CSS" << EOF
+/* Generated by my-theme.sh v${SCRIPT_VERSION} */
+:root {
+    --theme-bg: ${bg};
+    --theme-fg: ${fg};
+    --theme-accent: ${accent};
+    --theme-surface: ${muted};
+    --theme-color0: ${colors[0]};
+    --theme-color1: ${colors[1]};
+    --theme-color2: ${colors[2]};
+    --theme-color3: ${colors[3]};
+    --theme-color4: ${colors[4]};
+    --theme-color5: ${colors[5]};
+    --theme-timestamp: $(date +%s);
+}
+EOF
+
+    # Firefox
+    if [[ -d "${HOME}/.mozilla/firefox" ]]; then
+        for profile in "${HOME}"/.mozilla/firefox/*.default*; do
+            [[ -d "$profile/chrome" ]] && echo "@import \"${BROWSER_CSS}\";" > "$profile/chrome/colors.css"
+        done
+    fi
+
+    print_debug "Browser themes updated"
+}
+
 generate_gradience_preset() {
     local -a colors=("$@")
-    local bg_color="${colors[0]}"
-    local muted_bg
-    muted_bg=$(darken_color "$bg_color" 15)  # 15% darker for GTK
+    local bg="${colors[0]}" muted
 
-    local preset_file="${GRADIENCE_DIR}/my-theme.json"
+    muted=$(darken_color "$bg" 15)
 
-    cat > "$preset_file" << EOF
+    cat > "${GRADIENCE_DIR}/my-theme.json" << EOF
 {
   "name": "My Theme",
   "variables": {
@@ -770,353 +730,81 @@ generate_gradience_preset() {
     "error_color": "${colors[5]}",
     "error_bg_color": "${colors[5]}",
     "error_fg_color": "$(get_contrast_color "${colors[5]}")",
-    "window_bg_color": "${muted_bg}",
-    "view_bg_color": "${muted_bg}"
+    "window_bg_color": "${muted}",
+    "view_bg_color": "${muted}"
   }
 }
 EOF
 
-    log "Gradience preset generated: $preset_file"
-
-    # Apply if Gradience CLI is available
-    if command -v gradience-cli >/dev/null 2>&1; then
-        gradience-cli apply -p "$preset_file" 2>/dev/null || true
-        log "Applied Gradience preset"
-    fi
+    command -v gradience-cli >/dev/null 2>&1 && gradience-cli apply -p "${GRADIENCE_DIR}/my-theme.json" 2>/dev/null || true
 }
 
-# Universal wallpaper setter
-set_wallpaper() {
-    local wall_path="$1"
-    local de="${XDG_CURRENT_DESKTOP:-}"
-    local session_type="${XDG_SESSION_TYPE:-x11}"
+# ==================== HOOKS ====================
 
-    log "Setting wallpaper (DE: $de, Session: $session_type)"
-
-    if [[ ! -f "$wall_path" ]]; then
-        error_exit "Wallpaper not found: $wall_path"
-    fi
-
-    case "$de" in
-        *GNOME*|*Unity*|*Cinnamon*)
-            gsettings set org.gnome.desktop.background picture-uri "file://$wall_path" 2>/dev/null || true
-            gsettings set org.gnome.desktop.background picture-uri-dark "file://$wall_path" 2>/dev/null || true
-            ;;
-        *KDE*|*Plasma*)
-            if command -v qdbus >/dev/null 2>&1; then
-                qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
-                    "var allDesktops = desktops(); for (var i=0; i<allDesktops.length; i++) { d = allDesktops[i]; d.currentConfigGroup = Array('Wallpapers', 'org.kde.image', 'General'); d.writeConfig('Image', 'file://$wall_path'); }" 2>/dev/null || true
-            fi
-            ;;
-        *XFCE*)
-            xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$wall_path" 2>/dev/null || true
-            ;;
-        *sway*|*Hyprland*|*Wayland*)
-            if command -v swww >/dev/null 2>&1; then
-                # Ensure swww daemon is running
-                if ! pgrep -x "swww-daemon" >/dev/null; then
-                    swww-daemon &
-                    sleep 1
-                fi
-                # Animated transition
-                swww img "$wall_path" \
-                    --transition-fps 60 \
-                    --transition-type grow \
-                    --transition-pos 0.9,0.9 \
-                    --transition-duration 2 2>/dev/null || true
-            elif command -v swaybg >/dev/null 2>&1; then
-                pkill swaybg 2>/dev/null || true
-                swaybg -i "$wall_path" -m fill &
-            fi
-            ;;
-        *)
-            # Fallback for X11 WMs
-            if command -v feh >/dev/null 2>&1; then
-                feh --bg-fill "$wall_path" 2>/dev/null || true
-            elif command -v nitrogen >/dev/null 2>&1; then
-                nitrogen --set-zoom-fill "$wall_path" 2>/dev/null || true
-            else
-                log "No supported wallpaper setter found"
-                return 1
-            fi
-            ;;
-    esac
-
-    log "Wallpaper set successfully"
-}
-
-# Update terminal colors
-update_terminal_colors() {
-    local -a colors=("$@")
-    local bg_color="${colors[0]}"
-    local fg_color
-    fg_color=$(get_contrast_color "$bg_color")
-
-    # Create muted backgrounds for terminals
-    local muted_bg
-    muted_bg=$(darken_color "$bg_color" 20)  # 20% darker for terminal
-
-    # Save to cache (for hooks to use)
-    {
-        echo "BG=$bg_color"
-        echo "FG=$fg_color"
-        echo "MUTED_BG=$muted_bg"
-        echo "SELECTED_WALL=$CURRENT_WALLPAPER"
-        for i in "${!colors[@]}"; do
-            echo "COLOR$i=${colors[$i]}"
-        done
-        echo "TIMESTAMP=$(date +%s)"
-        echo "PROFILE=$CURRENT_THEME_PROFILE"
-    } > "$COLOR_CACHE"
-
-    log "Updating terminal colors..."
-
-    # Xresources
-    if [[ -f "${HOME}/.Xresources" ]]; then
-        local xresources_backup="${HOME}/.Xresources.bak"
-        cp "${HOME}/.Xresources" "$xresources_backup"
-
-        sed -i "s/^.*foreground:.*/*.foreground: ${fg_color}/g" "${HOME}/.Xresources" 2>/dev/null || true
-        sed -i "s/^.*background:.*/*.background: ${muted_bg}/g" "${HOME}/.Xresources" 2>/dev/null || true
-
-        for i in {0..15}; do
-            if [[ $i -lt ${#colors[@]} ]]; then
-                sed -i "s/^.*color${i}:.*/*.color${i}: ${colors[$i]}/g" "${HOME}/.Xresources" 2>/dev/null || true
-            fi
-        done
-
-        if command -v xrdb >/dev/null 2>&1; then
-            xrdb -merge "${HOME}/.Xresources" 2>/dev/null || true
-        fi
-    fi
-
-    # Kitty
-    if [[ -d "${HOME}/.config/kitty" ]]; then
-        local kitty_conf="${HOME}/.config/kitty/theme.conf"
-        {
-            echo "# Generated by my-theme.sh on $(date)"
-            echo "background $muted_bg"
-            echo "foreground $fg_color"
-            for i in {0..15}; do
-                [[ $i -lt ${#colors[@]} ]] && echo "color$i ${colors[$i]}"
-            done
-        } > "$kitty_conf"
-
-        pgrep -x "kitty" >/dev/null && kill -SIGUSR1 $(pgrep -x "kitty") 2>/dev/null || true
-    fi
-
-    # Alacritty
-    if [[ -d "${HOME}/.config/alacritty" ]]; then
-        local alacritty_conf="${HOME}/.config/alacritty/colors.toml"
-        {
-            echo "# Generated by my-theme.sh on $(date)"
-            echo "[colors.primary]"
-            echo "background = '$muted_bg'"
-            echo "foreground = '$fg_color'"
-            echo ""
-            echo "[colors.normal]"
-            for i in {0..7}; do
-                [[ $i -lt ${#colors[@]} ]] && echo "  color$i = '${colors[$i]}'"
-            done
-            echo ""
-            echo "[colors.bright]"
-            for i in {8..15}; do
-                [[ $((i-8)) -lt ${#colors[@]} ]] && echo "  color$((i-8)) = '${colors[$((i-8))]}'"
-            done
-        } > "$alacritty_conf"
-    fi
-
-    log "Terminal colors updated"
-}
-
-# Update browser themes with shared CSS
-update_browser_themes() {
-    local -a colors=("$@")
-    local bg_color="${colors[0]}"
-    local fg_color
-    fg_color=$(get_contrast_color "$bg_color")
-    local accent_color="${colors[2]}"
-    local muted_bg
-    muted_bg=$(darken_color "$bg_color" 15)
-
-    log "Updating browser themes..."
-
-    # Create shared CSS file for all browsers
-    cat > "$BROWSER_CSS" << EOF
-/* Generated by my-theme.sh v${SCRIPT_VERSION} */
-:root {
-    --theme-bg: ${bg_color};
-    --theme-fg: ${fg_color};
-    --theme-accent: ${accent_color};
-    --theme-surface: ${muted_bg};
-    --theme-color0: ${colors[0]};
-    --theme-color1: ${colors[1]};
-    --theme-color2: ${colors[2]};
-    --theme-color3: ${colors[3]};
-    --theme-color4: ${colors[4]};
-    --theme-color5: ${colors[5]};
-    --theme-timestamp: ${TIMESTAMP:-$(date +%s)};
-}
-EOF
-
-    # Firefox
-    local firefox_profiles="${HOME}/.mozilla/firefox"
-    if [[ -d "$firefox_profiles" ]]; then
-        for profile in "$firefox_profiles"/*.default*; do
-            if [[ -d "$profile/chrome" ]]; then
-                local firefox_css="${profile}/chrome/colors.css"
-                # Create import file for Firefox
-                echo "@import \"${BROWSER_CSS}\";" > "$firefox_css"
-                log "Updated Firefox theme for profile: $(basename "$profile")"
-            fi
-        done
-    fi
-
-    # Chrome/Chromium based browsers
-    local chrome_configs=(
-        "${HOME}/.config/google-chrome"
-        "${HOME}/.config/chromium"
-        "${HOME}/.config/brave-browser"
-        "${HOME}/.config/microsoft-edge"
-        "${HOME}/.config/vivaldi"
-    )
-
-    for browser_config in "${chrome_configs[@]}"; do
-        if [[ -d "$browser_config" ]]; then
-            local chrome_custom_css="${browser_config}/Default/User StyleSheets/Custom.css"
-            mkdir -p "$(dirname "$chrome_custom_css")"
-
-            # Create import for Chrome-based browsers
-            echo "/* Import theme colors */" > "$chrome_custom_css"
-            echo "@import url('file://${BROWSER_CSS}');" >> "$chrome_custom_css"
-
-            log "Updated theme for: $(basename "$browser_config")"
-        fi
-    done
-
-    notify "Browser Themes" "Updated browser color schemes"
-}
-
-# Create lockscreen hook (ultimate masterpiece)
 create_lockscreen_hook() {
-    local hook_file="${HOOKS_DIR}/99-lockscreen.sh"
+    local hook="${HOOKS_DIR}/99-lockscreen.sh"
+    [[ -f "$hook" ]] && return
 
-    if [[ ! -f "$hook_file" ]]; then
-        cat > "$hook_file" << 'EOF'
+    cat > "$hook" << 'EOF'
 #!/usr/bin/env bash
+CACHE="$HOME/.cache/my-theme/current_colors"
+[[ -f "$CACHE" ]] && source "$CACHE"
 
-# Ultimate Lockscreen Synchronization Hook
-# This runs after every theme update to sync your lockscreen
+# betterlockscreen
+command -v betterlockscreen >/dev/null 2>&1 && [[ -n "$SELECTED_WALL" ]] && [[ -f "$SELECTED_WALL" ]] && \
+    betterlockscreen -u "$SELECTED_WALL" --blur 0.5 &
 
-CACHE_FILE="$HOME/.cache/my-theme/current_colors"
-[[ -f "$CACHE_FILE" ]] && source "$CACHE_FILE"
-
-# For X11 with betterlockscreen
-if command -v betterlockscreen >/dev/null 2>&1; then
-    if [[ -n "$SELECTED_WALL" ]] && [[ -f "$SELECTED_WALL" ]]; then
-        betterlockscreen -u "$SELECTED_WALL" --blur 0.5 &
-        echo "betterlockscreen updated"
-    fi
-fi
-
-# For Wayland with hyprlock
-if [[ -d "$HOME/.config/hypr" ]]; then
-    HYPR_VARS="$HOME/.config/hypr/theme_vars.conf"
-    mkdir -p "$(dirname "$HYPR_VARS")"
-
-    # Create theme variables for hyprlock
-    {
-        echo "# Generated by my-theme.sh - $(date)"
-        echo "\$accent = rgb(${COLOR2#\#})"
-        echo "\$bg = rgb(${BG#\#})"
-        echo "\$fg = rgb(${FG#\#})"
-        echo "\$muted = rgb(${MUTED_BG#\#})"
-        echo "\$wallpaper = $SELECTED_WALL"
-    } > "$HYPR_VARS"
-
-    echo "hyprlock theme variables updated"
-fi
-
-# For SDDM (KDE Login Manager)
-if [[ -d "/etc/sddm.conf.d" ]] && command -v sddm-greeter-qt6 >/dev/null 2>&1; then
-    SDDM_THEME_DIR="/usr/share/sddm/themes/my-theme"
-    if [[ -d "$SDDM_THEME_DIR" ]] && [[ -f "$SELECTED_WALL" ]]; then
-        cp "$SELECTED_WALL" "$SDDM_THEME_DIR/background.jpg" 2>/dev/null || true
-        echo "SDDM wallpaper updated (requires root for permanent change)"
-    fi
-fi
-
-# For LightDM
-if [[ -d "/etc/lightdm" ]] && command -v lightdm >/dev/null 2>&1; then
-    LIGHTDM_BG="/usr/share/backgrounds/my-theme-wallpaper.jpg"
-    if [[ -f "$SELECTED_WALL" ]] && [[ -w "$(dirname "$LIGHTDM_BG")" ]]; then
-        cp "$SELECTED_WALL" "$LIGHTDM_BG" 2>/dev/null || true
-        echo "LightDM wallpaper updated"
-    fi
-fi
-
-echo "Lockscreen synchronization complete"
+# hyprlock
+[[ -d "$HOME/.config/hypr" ]] && {
+    mkdir -p "$HOME/.config/hypr"
+    cat > "$HOME/.config/hypr/theme_vars.conf" << INNER
+# Generated $(date)
+\$accent = rgb(${COLOR2#\#})
+\$bg = rgb(${BG#\#})
+\$fg = rgb(${FG#\#})
+\$muted = rgb(${MUTED_BG#\#})
+\$wallpaper = $SELECTED_WALL
+INNER
+}
 EOF
-        chmod +x "$hook_file"
-        log "Created lockscreen hook (ultimate masterpiece)"
-    fi
+    chmod +x "$hook"
 }
 
-# Create terminal preview hook
 create_terminal_preview_hook() {
-    local hook_file="${HOOKS_DIR}/98-terminal-preview.sh"
+    local hook="${HOOKS_DIR}/98-terminal-preview.sh"
+    [[ -f "$hook" ]] || ! command -v chafa >/dev/null 2>&1 && return
 
-    if [[ ! -f "$hook_file" ]] && command -v chafa >/dev/null 2>&1; then
-        cat > "$hook_file" << 'EOF'
+    cat > "$hook" << 'EOF'
 #!/usr/bin/env bash
+CACHE="$HOME/.cache/my-theme/current_colors"
+[[ -f "$CACHE" ]] && source "$CACHE"
 
-# Terminal Preview Hook
-# Shows a small preview of the new wallpaper in supported terminals
-
-CACHE_FILE="$HOME/.cache/my-theme/current_colors"
-[[ -f "$CACHE_FILE" ]] && source "$CACHE_FILE"
-
-# Only run in Kitty or terminals with Sixel support
 if [[ "$TERM" == *"kitty"* ]] || [[ "$TERM" == *"sixel"* ]]; then
-    if [[ -n "$SELECTED_WALL" ]] && [[ -f "$SELECTED_WALL" ]]; then
+    [[ -n "$SELECTED_WALL" ]] && [[ -f "$SELECTED_WALL" ]] && {
         echo
         echo "📸 Wallpaper Preview:"
-        if command -v chafa >/dev/null 2>&1; then
-            chafa "$SELECTED_WALL" --size=40x20
-        elif command -v img2sixel >/dev/null 2>&1; then
-            img2sixel "$SELECTED_WALL"
-        fi
+        chafa "$SELECTED_WALL" --size=40x20 2>/dev/null || true
         echo
-    fi
+    }
 fi
 EOF
-        chmod +x "$hook_file"
-        log "Created terminal preview hook"
-    fi
+    chmod +x "$hook"
 }
 
-# Create Spicetify hook
 create_spicetify_hook() {
-    local hook_file="${HOOKS_DIR}/update_spotify.sh"
+    local hook="${HOOKS_DIR}/update_spotify.sh"
+    [[ -f "$hook" ]] && return
 
-    if [[ ! -f "$hook_file" ]]; then
-        cat > "$hook_file" << 'EOF'
+    cat > "$hook" << 'EOF'
 #!/usr/bin/env bash
+CACHE="$HOME/.cache/my-theme/current_colors"
+[[ -f "$CACHE" ]] && source "$CACHE"
 
-# Spicetify Spotify theme updater
-CACHE_FILE="$HOME/.cache/my-theme/current_colors"
-[[ -f "$CACHE_FILE" ]] && source "$CACHE_FILE"
+SPOTIFY_THEME="$HOME/.config/spicetify/Themes/MyTheme"
 
-SPICETIFY_THEME_DIR="$HOME/.config/spicetify/Themes/MyTheme"
-
-if command -v spicetify >/dev/null 2>&1; then
-    # Create theme if it doesn't exist
-    if [[ ! -d "$SPICETIFY_THEME_DIR" ]]; then
-        mkdir -p "$SPICETIFY_THEME_DIR"
-    fi
-
-    # Generate color.ini
-    cat > "$SPICETIFY_THEME_DIR/color.ini" << INI
+command -v spicetify >/dev/null 2>&1 && {
+    mkdir -p "$SPOTIFY_THEME"
+    cat > "$SPOTIFY_THEME/color.ini" << INNER
 [Base]
 main_bg = ${BG#\#}
 main_fg = ${FG#\#}
@@ -1126,558 +814,413 @@ button = ${COLOR4#\#}
 button_active = ${COLOR5#\#}
 tab_active = ${COLOR2#\#}
 notification = ${COLOR1#\#}
-notification_error = ${COLOR1#\#}
 playback_bar = ${COLOR2#\#}
-misc = ${COLOR0#\#}
-INI
-
-    # Apply theme
+EOF
     spicetify config current_theme MyTheme
     spicetify apply -quiet
-    echo "Spotify theme updated"
-fi
+}
 EOF
-        chmod +x "$hook_file"
-        log "Created Spicetify hook"
-    fi
+    chmod +x "$hook"
 }
 
-# Execute external hooks
 run_hooks() {
-    local hooks_dir="${HOOKS_DIR}"
+    [[ ! -d "$HOOKS_DIR" ]] && return
+    local count=0
 
-    # Ensure the directory exists
-    if [[ ! -d "$hooks_dir" ]]; then
-        mkdir -p "$hooks_dir"
-        log "Created hooks directory: $hooks_dir"
-        return
-    fi
+    for hook in "$HOOKS_DIR"/*; do
+        [[ -x "$hook" ]] && [[ ! -d "$hook" ]] && {
+            "$hook" > "${CACHE_DIR}/hook_$(basename "$hook").log" 2>&1 &
+            ((count++))
+        }
+    done
 
-    # Find and execute all executable files in the hooks folder
-    if [[ -n "$(ls -A "$hooks_dir" 2>/dev/null)" ]]; then
-        log "Running post-theme hooks..."
-        local hook_count=0
-
-        for hook in "$hooks_dir"/*; do
-            if [[ -x "$hook" ]] && [[ ! -d "$hook" ]]; then
-                log "Executing hook: $(basename "$hook")"
-                # Run in background to prevent blocking
-                "$hook" > "${CACHE_DIR}/hook_$(basename "$hook").log" 2>&1 &
-                ((hook_count++))
-            fi
-        done
-
-        log "Started $hook_count hook(s) in background"
-
-        if [[ "$HAS_GUM" == true ]] && [[ $hook_count -gt 0 ]]; then
-            gum style --foreground 42 "✅ Started $hook_count hook(s)"
-        fi
-
-        if [[ $hook_count -gt 0 ]]; then
-            notify "Theme Hooks" "Started $hook_count background hooks"
-        fi
-    fi
+    [[ $count -gt 0 ]] && print_debug "Started $count hook(s)"
 }
 
-# Fetch random wallpaper from WallHaven
+# ==================== WALLHAVEN ====================
+
 fetch_wallhaven_wallpaper() {
-    local category="$1"
-    local api_url="https://wallhaven.cc/api/v1/search"
+    local cat="${1:-random}"
+    local url="https://wallhaven.cc/api/v1/search"
     local params=""
 
-    # Build API parameters based on category
-    case "$category" in
-        "general")
-            params="categories=111&purity=100"
-            ;;
-        "anime")
-            params="categories=010&purity=100"
-            ;;
-        "people")
-            params="categories=001&purity=100"
-            ;;
-        "random")
-            params="categories=${WALLHAVEN_CATEGORIES}&purity=${WALLHAVEN_PURITY}"
-            ;;
-        *)
-            params="categories=${WALLHAVEN_CATEGORIES}&purity=${WALLHAVEN_PURITY}"
-            ;;
+    case "$cat" in
+        general) params="categories=111&purity=100" ;;
+        anime)   params="categories=010&purity=100" ;;
+        people)  params="categories=001&purity=100" ;;
+        *)       params="categories=${WALLHAVEN_CATEGORIES}&purity=${WALLHAVEN_PURITY}" ;;
     esac
 
-    # Add API key if available
-    if [[ -n "$WALLHAVEN_API_KEY" ]]; then
-        params="${params}&apikey=${WALLHAVEN_API_KEY}"
-    fi
-
-    # Add resolution filter
-    if [[ -n "$WALLHAVEN_RESOLUTION" ]]; then
-        params="${params}&resolutions=${WALLHAVEN_RESOLUTION}"
-    fi
-
-    # Add sorting (random)
+    [[ -n "$WALLHAVEN_API_KEY" ]] && params="${params}&apikey=${WALLHAVEN_API_KEY}"
+    [[ -n "$WALLHAVEN_RESOLUTION" ]] && params="${params}&resolutions=${WALLHAVEN_RESOLUTION}"
     params="${params}&sorting=random&limit=${WALLHAVEN_LIMIT}"
 
-    log "Fetching WallHaven wallpapers with params: $params"
+    print_debug "Fetching WallHaven: $params"
 
-    # Make API request
-    local response
-    response=$(curl -s "${api_url}?${params}")
+    local resp
+    resp=$(curl -s "${url}?${params}")
 
-    # Parse response and extract image URLs
-    local image_urls
-    mapfile -t image_urls < <(echo "$response" | jq -r '.data[].path // empty' 2>/dev/null)
+    local urls
+    mapfile -t urls < <(echo "$resp" | jq -r '.data[].path // empty' 2>/dev/null)
 
-    if [[ ${#image_urls[@]} -eq 0 ]]; then
-        log "No wallpapers found from WallHaven"
-        return 1
-    fi
+    [[ ${#urls[@]} -eq 0 ]] && { print_warning "No wallpapers found"; return 1; }
 
-    # Select random image from results
-    local selected_url="${image_urls[$RANDOM % ${#image_urls[@]}]}"
-
-    if [[ -z "$selected_url" ]]; then
-        log "Failed to select wallpaper URL"
-        return 1
-    fi
-
-    log "Selected WallHaven wallpaper: $selected_url"
-    echo "$selected_url"
+    echo "${urls[$RANDOM % ${#urls[@]}]}"
 }
 
-# Download WallHaven wallpaper
 download_wallhaven_wallpaper() {
-    local image_url="$1"
-    local filename=$(basename "$image_url")
-    local local_path="${WALLHAVEN_DIR}/${filename}"
-    local temp_path="${WALLHAVEN_IMAGE_CACHE}/${filename}"
+    local url="$1"
+    local fname=$(basename "$url")
+    local local_path="${WALLHAVEN_DIR}/${fname}"
+    local tmp_path="${WALLHAVEN_IMAGE_CACHE}/${fname}"
 
-    # Check if already downloaded
-    if [[ -f "$local_path" ]]; then
-        log "Wallpaper already exists: $local_path"
-        echo "$local_path"
-        return 0
-    fi
+    [[ -f "$local_path" ]] && { echo "$local_path"; return 0; }
 
-    log "Downloading wallpaper from: $image_url"
+    print_info "Downloading: $fname"
 
-    # Download to temp location first
-    if curl -L -s --max-time 30 "$image_url" -o "$temp_path"; then
-        # Verify it's a valid image
-        if magick identify "$temp_path" >/dev/null 2>&1; then
-            mv "$temp_path" "$local_path"
-            log "Downloaded: $local_path"
+    if curl -L -s --max-time 30 "$url" -o "$tmp_path"; then
+        if magick identify "$tmp_path" >/dev/null 2>&1; then
+            mv "$tmp_path" "$local_path"
             echo "$local_path"
             return 0
-        else
-            log "Downloaded file is not a valid image"
-            rm -f "$temp_path"
         fi
-    else
-        log "Failed to download wallpaper"
     fi
 
+    rm -f "$tmp_path"
+    print_error "Download failed"
     return 1
 }
 
-# Clean old WallHaven wallpapers
 clean_wallhaven_folder() {
     local days="${1:-$WALLHAVEN_CLEAN_DAYS}"
+    [[ ! -d "$WALLHAVEN_DIR" ]] && return
 
-    if [[ ! -d "$WALLHAVEN_DIR" ]]; then
-        log "WallHaven directory does not exist"
-        return
-    fi
-
-    log "Cleaning WallHaven wallpapers older than $days days"
+    print_info "Cleaning wallpapers older than $days days"
 
     local count=0
-    local size_before=$(du -sh "$WALLHAVEN_DIR" | cut -f1)
-
-    # Find and delete old files
     while IFS= read -r file; do
         rm -f "$file"
         ((count++))
     done < <(find "$WALLHAVEN_DIR" -type f -mtime +"$days" 2>/dev/null)
 
-    local size_after=$(du -sh "$WALLHAVEN_DIR" | cut -f1)
+    [[ $count -gt 0 ]] && print_success "Removed $count old wallpapers"
+}
 
-    log "Cleaned $count files (Size: $size_before → $size_after)"
+# ==================== PROFILE MANAGEMENT ====================
 
-    if [[ $count -gt 0 ]]; then
-        notify "WallHaven Cleanup" "Removed $count old wallpapers"
+detect_profile_from_apps() {
+    declare -A profiles=()
+    local detected=""
+
+    # Load user rules
+    if [[ -d "$PROFILE_RULES_DIR" ]]; then
+        for rule in "$PROFILE_RULES_DIR"/*.conf; do
+            [[ -f "$rule" ]] && source "$rule" && [[ -n "$APP_PATTERN" ]] && [[ -n "$PROFILE_NAME" ]] && \
+                profiles["$APP_PATTERN"]="$PROFILE_NAME"
+        done
+    fi
+
+    # Default rules
+    profiles["code"]="work"
+    profiles["idea"]="work"
+    profiles["steam"]="gaming"
+    profiles["spotify"]="relax"
+    profiles["firefox"]="web"
+    profiles["chrome"]="web"
+
+    # Temperature check
+    if [[ "$TEMP_MONITORING" == true ]]; then
+        local temp
+        temp=$(get_cpu_temperature)
+        [[ $temp -gt $HIGH_TEMP_THRESHOLD ]] && { echo "gaming"; return; }
+    fi
+
+    # Check running processes
+    for pattern in "${!profiles[@]}"; do
+        pgrep -f "$pattern" >/dev/null 2>&1 && { detected="${profiles[$pattern]}"; break; }
+    done
+
+    echo "${detected:-default}"
+}
+
+check_and_switch_profile() {
+    [[ "$AUTO_PROFILE_SWITCHING" != true ]] && return
+
+    local detected
+    detected=$(detect_profile_from_apps)
+
+    [[ -f "$LAST_ACTIVE_PROFILE" ]] && [[ "$(cat "$LAST_ACTIVE_PROFILE" 2>/dev/null)" == "$detected" ]] && return
+
+    if [[ "$detected" != "default" ]] && [[ "$detected" != "$CURRENT_THEME_PROFILE" ]]; then
+        print_info "Auto-switching to profile: $detected"
+        notify "Profile Switch" "Auto-switched to $detected profile"
+        switch_profile "$detected" "no-update"
+        echo "$detected" > "$LAST_ACTIVE_PROFILE"
+        update_theme "random"
     fi
 }
 
-# Save theme snapshot
+create_profile() {
+    local name="$1"
+    local dir="${PROFILES_DIR}/${name}"
+
+    [[ -d "$dir" ]] && ! gum confirm "Overwrite profile '$name'?" && return
+    rm -rf "$dir" 2>/dev/null
+    mkdir -p "$dir"
+
+    local wall_dir
+    wall_dir=$(gum input --placeholder "Wallpaper directory" --value "$WALLPAPER_DIR")
+    echo "$wall_dir" > "${dir}/wallpaper_dir.txt"
+
+    local night
+    night=$(gum input --placeholder "Night override hour" --value "$NIGHT_OVERRIDE")
+    echo "NIGHT_OVERRIDE=$night" > "${dir}/settings.conf"
+
+    print_success "Created profile: $name"
+    notify "Theme Profile" "Created: $name"
+}
+
+create_profile_rule() {
+    local name="$1"
+    local file="${PROFILE_RULES_DIR}/${name}.conf"
+
+    [[ -f "$file" ]] && ! gum confirm "Overwrite rule?" && return
+
+    local pattern profile
+    pattern=$(gum input --placeholder "App pattern (e.g., 'code')")
+    profile=$(gum input --placeholder "Profile name")
+
+    cat > "$file" << EOF
+# Profile rule generated $(date)
+APP_PATTERN="$pattern"
+PROFILE_NAME="$profile"
+EOF
+
+    print_success "Created rule: $name"
+}
+
+switch_profile() {
+    local profile="$1" skip="${2:-}"
+    local dir="${PROFILES_DIR}/${profile}"
+
+    if [[ "$profile" == "default" ]]; then
+        rm -f "$CURRENT_PROFILE"
+        CURRENT_THEME_PROFILE="default"
+        WALLPAPER_DIR="${HOME}/Pictures/Wallpapers"
+    else
+        [[ ! -d "$dir" ]] && error_exit "Profile not found: $profile"
+        echo "$profile" > "$CURRENT_PROFILE"
+        CURRENT_THEME_PROFILE="$profile"
+        [[ -f "$dir/settings.conf" ]] && source "$dir/settings.conf"
+        [[ -f "$dir/wallpaper_dir.txt" ]] && WALLPAPER_DIR=$(cat "$dir/wallpaper_dir.txt")
+    fi
+
+    save_settings
+    print_success "Switched to profile: $profile"
+    notify "Theme Profile" "Switched to: $profile"
+}
+
+# ==================== SNAPSHOTS ====================
+
 save_snapshot() {
-    local snapshot_name="$1"
-    local snapshot_dir="${SNAPSHOTS_DIR}/${snapshot_name}"
+    local name="${1:-snapshot_$(date +%Y%m%d_%H%M%S)}"
+    local dir="${SNAPSHOTS_DIR}/${name}"
 
-    if [[ -z "$snapshot_name" ]]; then
-        snapshot_name="snapshot_$(date +%Y%m%d_%H%M%S)"
-        snapshot_dir="${SNAPSHOTS_DIR}/${snapshot_name}"
-    fi
+    mkdir -p "$dir"
 
-    mkdir -p "$snapshot_dir"
+    [[ -f "$COLOR_CACHE" ]] && cp "$COLOR_CACHE" "$dir/colors.txt"
+    [[ -f "$SETTINGS_FILE" ]] && cp "$SETTINGS_FILE" "$dir/settings.conf" 2>/dev/null || true
 
-    # Save current colors
-    if [[ -f "$COLOR_CACHE" ]]; then
-        cp "$COLOR_CACHE" "$snapshot_dir/colors.txt"
-    fi
-
-    # Save settings
-    cp "$SETTINGS_FILE" "$snapshot_dir/settings.conf" 2>/dev/null || true
-
-    # Save current wallpaper path and create thumbnail
     if [[ -n "${CURRENT_WALLPAPER:-}" ]] && [[ -f "$CURRENT_WALLPAPER" ]]; then
-        cp "$CURRENT_WALLPAPER" "$snapshot_dir/wallpaper.jpg" 2>/dev/null || true
-        echo "$CURRENT_WALLPAPER" > "$snapshot_dir/wallpaper_path.txt"
-        create_thumbnail "$CURRENT_WALLPAPER" "$snapshot_name"
+        cp "$CURRENT_WALLPAPER" "$dir/wallpaper.jpg" 2>/dev/null || true
+        echo "$CURRENT_WALLPAPER" > "$dir/wallpaper_path.txt"
+        create_thumbnail "$CURRENT_WALLPAPER" "$name"
     fi
 
-    log "Saved snapshot: $snapshot_name"
-    notify "Theme Snapshot" "Saved as: $snapshot_name"
-    echo "$snapshot_name"
+    print_success "Saved snapshot: $name"
+    notify "Theme Snapshot" "Saved as: $name"
 }
 
-# Load theme snapshot
 load_snapshot() {
-    local snapshot_name="$1"
-    local snapshot_dir="${SNAPSHOTS_DIR}/${snapshot_name}"
+    local name="$1"
+    local dir="${SNAPSHOTS_DIR}/${name}"
 
-    if [[ ! -d "$snapshot_dir" ]]; then
-        error_exit "Snapshot not found: $snapshot_name"
+    [[ ! -d "$dir" ]] && error_exit "Snapshot not found: $name"
+
+    [[ -f "$dir/colors.txt" ]] && cp "$dir/colors.txt" "$COLOR_CACHE" && source "$COLOR_CACHE"
+    [[ -f "$dir/settings.conf" ]] && cp "$dir/settings.conf" "$SETTINGS_FILE" && load_settings
+
+    if [[ -f "$dir/wallpaper.jpg" ]]; then
+        CURRENT_WALLPAPER="$dir/wallpaper.jpg"
+    elif [[ -f "$dir/wallpaper_path.txt" ]]; then
+        CURRENT_WALLPAPER=$(cat "$dir/wallpaper_path.txt")
     fi
 
-    # Load colors
-    if [[ -f "$snapshot_dir/colors.txt" ]]; then
-        cp "$snapshot_dir/colors.txt" "$COLOR_CACHE"
-        source "$COLOR_CACHE"
-    fi
-
-    # Load settings
-    if [[ -f "$snapshot_dir/settings.conf" ]]; then
-        cp "$snapshot_dir/settings.conf" "$SETTINGS_FILE"
-        load_settings
-    fi
-
-    # Load wallpaper
-    if [[ -f "$snapshot_dir/wallpaper.jpg" ]]; then
-        CURRENT_WALLPAPER="$snapshot_dir/wallpaper.jpg"
-    elif [[ -f "$snapshot_dir/wallpaper_path.txt" ]]; then
-        CURRENT_WALLPAPER=$(cat "$snapshot_dir/wallpaper_path.txt")
-    fi
-
-    log "Loaded snapshot: $snapshot_name"
-    notify "Theme Snapshot" "Loaded: $snapshot_name"
+    print_success "Loaded snapshot: $name"
+    notify "Theme Snapshot" "Loaded: $name"
 }
 
-# Debounced folder watcher
+# ==================== WATCHER ====================
+
 start_watcher() {
-    if ! command -v inotifywait >/dev/null 2>&1; then
-        log "inotifywait not found. Please install inotify-tools."
-        return 1
-    fi
+    ! command -v inotifywait >/dev/null 2>&1 && { print_error "inotifywait not found"; return 1; }
+    check_deep_sleep && { print_info "Deep sleep active - not starting watcher"; return 0; }
 
-    # Check deep sleep mode
-    if check_deep_sleep; then
-        log "Deep sleep mode active - not starting watcher"
-        notify "Deep Sleep" "Watcher disabled to save battery"
-        return 0
-    fi
+    stop_watcher
 
-    log "Starting debounced folder watcher on $WALLPAPER_DIR"
-
-    # Kill existing watcher if running
-    if [[ -f "$WATCH_PID_FILE" ]]; then
-        local old_pid
-        old_pid=$(cat "$WATCH_PID_FILE")
-        kill "$old_pid" 2>/dev/null || true
-        rm "$WATCH_PID_FILE"
-        sleep 1
-    fi
-
-    # Start watcher in background with debounce
     (
-        local last_trigger=0
-
+        local last=0
         while true; do
-            # Check deep sleep periodically
-            if check_deep_sleep; then
-                log "Deep sleep activated - stopping watcher"
-                exit 0
-            fi
-
-            # Wait for file system events
+            check_deep_sleep && { print_debug "Deep sleep - stopping watcher"; exit 0; }
             inotifywait -q -e create -e delete -e move -e modify "$WALLPAPER_DIR" 2>/dev/null
-
-            current_time=$(date +%s)
-            time_diff=$((current_time - last_trigger))
-
-            # Debounce: only trigger if last trigger was more than WATCH_DEBOUNCE seconds ago
-            if [[ $time_diff -gt $WATCH_DEBOUNCE ]]; then
-                log "Wallpaper directory changed, updating theme (debounced)..."
-                # Run update in background to not block watcher
+            local now=$(date +%s)
+            if [[ $((now - last)) -gt $WATCH_DEBOUNCE ]]; then
+                print_debug "Directory changed, updating..."
                 (
-                    # Save current FORCE_MODE and override for watcher
-                    OLD_FORCE_MODE="$FORCE_MODE"
-                    FORCE_MODE=true  # Force random on folder changes
+                    OLD_FORCE="$FORCE_MODE"
+                    FORCE_MODE=true
                     update_theme "random"
-                    FORCE_MODE="$OLD_FORCE_MODE"
+                    FORCE_MODE="$OLD_FORCE"
                 ) &
-                last_trigger=$current_time
-            else
-                log "Debounced: ignoring rapid event (last trigger ${time_diff}s ago)"
+                last=$now
             fi
         done
     ) &
 
     echo $! > "$WATCH_PID_FILE"
-    log "Debounced watcher started with PID: $(cat "$WATCH_PID_FILE")"
-
+    print_success "Watcher started (PID: $!)"
     notify "Folder Watcher" "Started monitoring $WALLPAPER_DIR"
 }
 
-# Stop folder watcher
 stop_watcher() {
-    if [[ -f "$WATCH_PID_FILE" ]]; then
-        local pid
-        pid=$(cat "$WATCH_PID_FILE")
-        kill "$pid" 2>/dev/null || true
-        rm "$WATCH_PID_FILE"
-        log "Watcher stopped"
-
-        if [[ "$HAS_GUM" == true ]]; then
-            gum style --foreground 42 "✅ Folder watcher stopped"
-        fi
-
-        notify "Folder Watcher" "Stopped monitoring"
-    fi
+    [[ -f "$WATCH_PID_FILE" ]] && {
+        kill "$(cat "$WATCH_PID_FILE")" 2>/dev/null || true
+        rm -f "$WATCH_PID_FILE"
+        print_success "Watcher stopped"
+        notify "Folder Watcher" "Stopped"
+    }
 }
 
-# Create profile
-create_profile() {
-    local profile_name="$1"
-    local profile_dir="${PROFILES_DIR}/${profile_name}"
+# ==================== UPDATE THEME ====================
 
-    if [[ -d "$profile_dir" ]]; then
-        if gum confirm "Profile '$profile_name' exists. Overwrite?"; then
-            rm -rf "$profile_dir"
-        else
-            return
-        fi
+update_theme() {
+    local mode="$1"
+    local condition="" wallpaper=""
+
+    print_info "Theme update started (mode: $mode)"
+
+    MONITOR_RESOLUTION=$(get_monitor_resolution)
+    print_debug "Monitor: $MONITOR_RESOLUTION"
+
+    case "$mode" in
+        weather)  condition=$(fetch_weather_condition) ;;
+        time)
+            local h=$(date +%H)
+            [[ $h -ge 5 && $h -lt 9 ]] && condition="morning"
+            [[ $h -ge 9 && $h -lt 17 ]] && condition="day"
+            [[ $h -ge 17 && $h -lt 20 ]] && condition="evening"
+            [[ $h -ge 20 || $h -lt 5 ]] && condition="night"
+            ;;
+        specific) [[ -n "${SPECIFIC_WALLPAPER:-}" ]] && wallpaper="$SPECIFIC_WALLPAPER" ;;
+        *)        condition="random" ;;
+    esac
+
+    if [[ -z "$wallpaper" ]]; then
+        wallpaper=$(select_wallpaper "$condition")
     fi
 
-    mkdir -p "$profile_dir"
+    [[ -z "$wallpaper" ]] && { print_warning "No wallpaper found"; return 1; }
 
-    # Ask for wallpaper directory
-    local wallpaper_dir
-    wallpaper_dir=$(gum input --placeholder "Wallpaper directory" --value "$WALLPAPER_DIR")
-    echo "$wallpaper_dir" > "$profile_dir/wallpaper_dir.txt"
+    CURRENT_WALLPAPER="$wallpaper"
+    print_success "Selected: $(basename "$wallpaper")"
 
-    # Ask for settings
-    local night_override
-    night_override=$(gum input --placeholder "Night override hour" --value "$NIGHT_OVERRIDE")
-    echo "NIGHT_OVERRIDE=$night_override" > "$profile_dir/settings.conf"
+    mapfile -t colors < <(extract_colors "$wallpaper" 8)
 
-    gum style --foreground 42 "✅ Created profile: $profile_name"
-    notify "Theme Profile" "Created: $profile_name"
-}
+    set_wallpaper "$wallpaper"
+    update_terminal_colors "${colors[@]}"
+    update_browser_themes "${colors[@]}"
+    command -v gradience-cli >/dev/null 2>&1 && generate_gradience_preset "${colors[@]}"
+    run_hooks
 
-# Create profile rule
-create_profile_rule() {
-    local rule_name="$1"
-    local rule_file="${PROFILE_RULES_DIR}/${rule_name}.conf"
+    [[ "$WALLHAVEN_AUTO_CLEAN" == true ]] && clean_wallhaven_folder "$WALLHAVEN_CLEAN_DAYS" >/dev/null 2>&1 &
 
-    if [[ -f "$rule_file" ]]; then
-        if ! gum confirm "Rule exists. Overwrite?"; then
-            return
-        fi
-    fi
-
-    local app_pattern
-    app_pattern=$(gum input --placeholder "App pattern (e.g., 'code', 'firefox')")
-    local profile_name
-    profile_name=$(gum input --placeholder "Profile name to switch to")
-
-    cat > "$rule_file" << EOF
-# Profile rule for my-theme.sh
-# Generated on $(date)
-
-APP_PATTERN="$app_pattern"
-PROFILE_NAME="$profile_name"
-EOF
-
-    gum style --foreground 42 "✅ Created profile rule: $rule_name"
-}
-
-# Switch profile
-switch_profile() {
-    local profile_name="$1"
-    local skip_update="${2:-}"
-    local profile_dir="${PROFILES_DIR}/${profile_name}"
-
-    if [[ ! -d "$profile_dir" ]] && [[ "$profile_name" != "default" ]]; then
-        error_exit "Profile not found: $profile_name"
-    fi
-
-    # Save current profile
-    if [[ "$profile_name" == "default" ]]; then
-        rm -f "$CURRENT_PROFILE"
-        CURRENT_THEME_PROFILE="default"
-        WALLPAPER_DIR="${HOME}/Pictures/Wallpapers"
-    else
-        echo "$profile_name" > "$CURRENT_PROFILE"
-        CURRENT_THEME_PROFILE="$profile_name"
-
-        # Load profile settings
-        if [[ -f "$profile_dir/settings.conf" ]]; then
-            source "$profile_dir/settings.conf"
-        fi
-
-        # Update wallpaper dir
-        if [[ -f "$profile_dir/wallpaper_dir.txt" ]]; then
-            WALLPAPER_DIR=$(cat "$profile_dir/wallpaper_dir.txt")
-        fi
-    fi
-
+    print_success "Theme updated!"
+    notify "Theme Updated" "Mode: $mode | Profile: $CURRENT_THEME_PROFILE" "low"
     save_settings
-    log "Switched to profile: $profile_name"
-    notify "Theme Profile" "Switched to: $profile_name"
-
-    # Optionally update theme immediately
-    if [[ -z "$skip_update" ]] && [[ "$HAS_GUM" == true ]]; then
-        if gum confirm "Update theme now with new profile?"; then
-            update_theme "random"
-        fi
-    fi
 }
 
-# Create desktop entry
-create_desktop_entry() {
-    local desktop_file="${DESKTOP_ENTRY_DIR}/my-theme.desktop"
+# ==================== DAEMON ====================
 
-    cat > "$desktop_file" << EOF
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=My Theme Engine
-Comment=Dynamic Wallpaper & System Theme Manager
-Exec=$TERMINAL -e $0 --interactive
-Icon=preferences-desktop-theme
-Terminal=false
-Categories=Settings;System;
-Keywords=theme;wallpaper;dynamic;
-EOF
-
-    chmod +x "$desktop_file"
-    log "Created desktop entry: $desktop_file"
-    notify "Desktop Entry" "Added to application menu"
-}
-
-# Create systemd user service
-create_systemd_service() {
-    local service_file="${SYSTEMD_USER_DIR}/my-theme.service"
-
-    cat > "$service_file" << EOF
-[Unit]
-Description=My Theme Engine - Dynamic Wallpaper & Theme Manager
-After=graphical-session.target
-
-[Service]
-Type=simple
-ExecStart=$0 --daemon --interval 30 --weather
-Restart=on-failure
-RestartSec=30
-Environment=DISPLAY=:0
-Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%I/bus
-
-[Install]
-WantedBy=default.target
-EOF
-
-    log "Created systemd user service: $service_file"
-    notify "Systemd Service" "Created. Enable with: systemctl --user enable my-theme.service"
-}
-
-# Run as daemon
 run_daemon() {
-    local interval="${1:-30}"
-    local mode="${2:-weather}"
+    local interval="${1:-30}" mode="${2:-random}"
 
-    log "Starting daemon mode (interval: ${interval} minutes, mode: ${mode})"
-    notify "Theme Daemon" "Starting with ${interval}min interval"
+    echo $$ > "$DAEMON_PID_FILE"
+    print_info "Daemon started (interval: ${interval}min, mode: ${mode})"
+    notify "Theme Daemon" "Started with ${interval}min interval"
 
-    # Start folder watcher
     start_watcher
-
-    # Convert minutes to seconds
-    local interval_seconds=$((interval * 60))
-
-    # Trap to clean up watcher on exit
     trap stop_watcher EXIT INT TERM
 
-    # Run initial update
     update_theme "$mode"
 
+    local secs=$((interval * 60))
+
     while true; do
-        # Check for app-based profile switching
         if [[ "$AUTO_PROFILE_SWITCHING" == true ]]; then
             check_and_switch_profile
         fi
 
-        # Check if on battery and adjust interval
-        local current_interval=$interval_seconds
-        if check_battery; then
-            current_interval=$((interval_seconds * BATTERY_INTERVAL_MULTIPLIER))
-            log "On battery: increasing interval to ${current_interval}s"
-        fi
+        local cur=$secs
+        check_battery && cur=$((secs * BATTERY_INTERVAL_MULTIPLIER))
 
-        # Check deep sleep (battery < threshold)
         if check_deep_sleep; then
-            log "Deep sleep mode active - stopping watcher and sleeping longer"
+            print_info "Deep sleep - sleeping longer"
             stop_watcher
-            sleep $((current_interval * 3))  # Sleep even longer in deep sleep
+            sleep $((cur * 3))
             continue
         fi
 
-        log "Sleeping for $((current_interval / 60)) minutes..."
-        sleep "$current_interval"
+        print_debug "Sleeping for $((cur / 60)) minutes"
+        sleep "$cur"
         update_theme "$mode"
     done
 }
 
-# Install dependencies
+# ==================== INSTALLATION ====================
+
 install_dependencies() {
-    log "Installing dependencies..."
+    print_info "Installing dependencies..."
 
-    local packages=()
-    local pkg_manager=""
+    local pkgs=()
+    local mgr=""
 
-    # Detect package manager
     if command -v apt >/dev/null 2>&1; then
-        pkg_manager="apt"
-        packages=(imagemagick feh bc curl jq inotify-tools x11-utils acpi libnotify-bin lm-sensors chafa)
+        mgr="apt"
+        pkgs=(imagemagick feh bc curl jq inotify-tools x11-utils acpi libnotify-bin lm-sensors chafa)
     elif command -v dnf >/dev/null 2>&1; then
-        pkg_manager="dnf"
-        packages=(ImageMagick feh bc curl jq inotify-tools xrandr acpi libnotify lm_sensors chafa)
+        mgr="dnf"
+        pkgs=(ImageMagick feh bc curl jq inotify-tools xrandr acpi libnotify lm_sensors chafa)
     elif command -v pacman >/dev/null 2>&1; then
-        pkg_manager="pacman"
-        packages=(imagemagick feh bc curl jq inotify-tools xorg-xrandr acpi libnotify lm_sensors chafa)
+        mgr="pacman"
+        pkgs=(imagemagick feh bc curl jq inotify-tools xorg-xrandr acpi libnotify lm_sensors chafa)
     elif command -v zypper >/dev/null 2>&1; then
-        pkg_manager="zypper"
-        packages=(imagemagick feh bc curl jq inotify-tools xrandr acpi libnotify lm_sensors chafa)
+        mgr="zypper"
+        pkgs=(imagemagick feh bc curl jq inotify-tools xrandr acpi libnotify lm_sensors chafa)
     else
         error_exit "Unsupported package manager"
     fi
 
-    # Install gum if not present
+    # Install gum
     if ! command -v gum >/dev/null 2>&1; then
-        if [[ "$pkg_manager" == "apt" ]]; then
+        if [[ "$mgr" == "apt" ]]; then
             echo "deb [trusted=yes] https://repo.charm.sh/apt/ /" | sudo tee /etc/apt/sources.list.d/charm.list
             sudo apt update && sudo apt install -y gum
-        elif [[ "$pkg_manager" == "pacman" ]]; then
-            sudo pacman -S --noconfirm gum
+        elif [[ "$mgr" == "pacman" ]]; then
+            if command -v yay >/dev/null 2>&1; then
+                yay -S --noconfirm gum
+            else
+                sudo pacman -S --noconfirm gum
+            fi
         else
             curl -L https://github.com/charmbracelet/gum/releases/download/v0.14.0/gum_0.14.0_linux_x86_64.tar.gz | tar xz
             sudo mv gum_*/gum /usr/local/bin/
@@ -1685,1082 +1228,605 @@ install_dependencies() {
     fi
 
     # Install packages
-    if [[ "$pkg_manager" == "apt" ]]; then
-        sudo apt update
-        sudo apt install -y "${packages[@]}"
-    elif [[ "$pkg_manager" == "dnf" ]]; then
-        sudo dnf install -y "${packages[@]}"
-    elif [[ "$pkg_manager" == "pacman" ]]; then
-        sudo pacman -S --noconfirm "${packages[@]}"
-    elif [[ "$pkg_manager" == "zypper" ]]; then
-        sudo zypper install -y "${packages[@]}"
+    if [[ "$mgr" == "apt" ]]; then
+        sudo apt update && sudo apt install -y "${pkgs[@]}"
+    elif [[ "$mgr" == "dnf" ]]; then
+        sudo dnf install -y "${pkgs[@]}"
+    elif [[ "$mgr" == "pacman" ]]; then
+        sudo pacman -S --noconfirm "${pkgs[@]}"
+    elif [[ "$mgr" == "zypper" ]]; then
+        sudo zypper install -y "${pkgs[@]}"
     fi
 
-    # Install swww for Wayland
+    # swww for Wayland
     if [[ "$XDG_SESSION_TYPE" == "wayland" ]] && ! command -v swww >/dev/null 2>&1; then
-        if command -v cargo >/dev/null 2>&1; then
-            cargo install swww
-        fi
+        command -v cargo >/dev/null 2>&1 && cargo install swww
     fi
 
-    log "Dependencies installed successfully!"
+    print_success "Dependencies installed!"
     notify "Theme Engine" "Dependencies installed"
 }
 
-# WallHaven menu
-wallhaven_menu() {
-    local choice
+create_desktop_entry() {
+    local file="${DESKTOP_ENTRY_DIR}/my-theme.desktop"
+    local term="${TERMINAL:-xterm}"
 
+    cat > "$file" << EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=My Theme Engine
+Comment=Dynamic Wallpaper & System Theme Manager
+Exec=$term -e $0 --interactive
+Icon=preferences-desktop-wallpaper
+Terminal=false
+Categories=Settings;System;
+Keywords=theme;wallpaper;dynamic;
+EOF
+
+    chmod +x "$file"
+    print_success "Desktop entry created"
+}
+
+create_systemd_service() {
+    local file="${SYSTEMD_USER_DIR}/my-theme.service"
+
+    cat > "$file" << EOF
+[Unit]
+Description=My Theme Engine - Dynamic Wallpaper & Theme Manager
+After=graphical-session.target
+
+[Service]
+Type=simple
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=DISPLAY=:0
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%i/bus
+ExecStart=$0 --daemon --mode random --interval 30
+Restart=on-failure
+RestartSec=10
+PIDFile=${DAEMON_PID_FILE}
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+
+    print_success "Systemd service created"
+    print_info "Enable with: systemctl --user enable my-theme.service"
+}
+
+reset_config() {
+    print_warning "Resetting configuration..."
+    stop_watcher 2>/dev/null || true
+    stop_daemon 2>/dev/null || true
+    rm -rf "${CACHE_DIR:?}"/* 2>/dev/null
+    rm -f "$SETTINGS_FILE" "$CURRENT_PROFILE" "$LAST_ACTIVE_PROFILE" "$WALLHAVEN_CONFIG" "$API_KEY_FILE"
+    mkdir -p "$CACHE_DIR" "$HOOKS_DIR"
+    CURRENT_THEME_PROFILE="default"
+    print_success "Configuration reset"
+    notify "Theme Engine" "Configuration reset"
+}
+
+# ==================== SELF TEST ====================
+
+self_test() {
+    echo -e "\n${BOLD}🔍 My Theme Engine v${SCRIPT_VERSION} Self-Test${NC}"
+    echo "========================================"
+
+    # Test script location
+    echo -n "• Script location: "
+    echo -e "${GREEN}✓${NC} $0"
+
+    # Test terminal
+    echo -n "• Terminal: "
+    if [[ "$IS_TERMINAL" == true ]]; then
+        echo -e "${GREEN}✓ Interactive${NC}"
+    else
+        echo -e "${YELLOW}⚠ Non-interactive${NC}"
+    fi
+
+    # Test dependencies
+    echo "• Dependencies:"
+    for dep in bash grep sed curl magick feh xrandr acpi notify-send inotifywait; do
+        echo -n "  $dep... "
+        if command -v "$dep" >/dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC}"
+        elif command -v "${dep/imagemagick/magick}" >/dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} (as magick)"
+        else
+            echo -e "${YELLOW}⚠ Not found${NC}"
+        fi
+    done
+
+    # Test gum
+    echo -n "• Gum TUI: "
+    if command -v gum >/dev/null 2>&1; then
+        echo -e "${GREEN}✓$(gum --version 2>/dev/null | head -1 | sed 's/.*/ &/')${NC}"
+    else
+        echo -e "${YELLOW}⚠ Not installed${NC}"
+    fi
+
+    # Test config dirs
+    echo "• Config directories:"
+    for dir in "$CONFIG_DIR" "$CACHE_DIR" "$WALLPAPER_DIR"; do
+        echo -n "  $dir... "
+        if [[ -d "$dir" ]]; then
+            echo -e "${GREEN}✓${NC}"
+        else
+            echo -e "${CYAN}ℹ Will be created${NC}"
+        fi
+    done
+
+    echo "========================================"
+    echo -e "${GREEN}✅ Self-test complete${NC}"
+}
+
+# ==================== MENUS ====================
+
+wallhaven_menu() {
     while true; do
+        local choice
         choice=$(gum choose \
-            --header="🌌 WallHaven Wallpaper Manager" \
+            --header="🌌 WallHaven Manager" \
             --cursor="👉 " \
-            --selected.foreground="212" \
-            --height=15 \
-            "🔑 Configure API Key (secure)" \
-            "🎲 Fetch Random Wallpaper" \
-            "🖼️  Fetch General Wallpapers" \
-            "🌸 Fetch Anime Wallpapers" \
-            "👥 Fetch People Wallpapers" \
-            "⚙️  Configure Categories" \
-            "🧹 Clean Old Wallpapers" \
-            "📁 Open WallHaven Folder" \
-            "↩️  Back to Main Menu")
+            --height=10 \
+            "🔑 Configure API Key" \
+            "🎲 Fetch Random" \
+            "🖼️  Fetch General" \
+            "🌸 Fetch Anime" \
+            "👥 Fetch People" \
+            "⚙️  Settings" \
+            "🧹 Clean Old" \
+            "📁 Open Folder" \
+            "↩️  Back")
 
         case "$choice" in
             *"API Key"*)
-                local api_key
-                api_key=$(gum input --placeholder "Enter your WallHaven API Key" --password)
-                if [[ -n "$api_key" ]]; then
-                    save_api_key "$api_key"
-                    gum style --foreground 42 "✅ API Key saved securely!"
-                fi
+                local key
+                key=$(gum input --placeholder "Enter WallHaven API Key" --password)
+                [[ -n "$key" ]] && save_api_key "$key"
                 ;;
-            *"Random Wallpaper"*)
-                if [[ -z "$WALLHAVEN_API_KEY" ]]; then
-                    if ! gum confirm "No API key configured. Continue without key? (rate limits apply)"; then
-                        continue
-                    fi
-                fi
-
-                gum spin --spinner globe --title "Fetching random wallpaper..." -- sleep 1
-                local image_url
-                image_url=$(fetch_wallhaven_wallpaper "random")
-
-                if [[ -n "$image_url" ]]; then
-                    gum style --foreground 212 "📸 Downloading: $image_url"
-                    local local_path
-                    local_path=$(download_wallhaven_wallpaper "$image_url")
-
-                    if [[ -n "$local_path" ]] && [[ -f "$local_path" ]]; then
-                        gum style --foreground 42 "✅ Downloaded to: $local_path"
-
-                        if gum confirm "Apply this wallpaper now?"; then
-                            SPECIFIC_WALLPAPER="$local_path" update_theme "specific"
-                        fi
-                    else
-                        gum style --foreground 196 "❌ Failed to download wallpaper"
-                    fi
-                else
-                    gum style --foreground 196 "❌ Failed to fetch wallpaper"
-                fi
+            *"Random"*)
+                [[ -z "$WALLHAVEN_API_KEY" ]] && ! gum confirm "No API key. Continue?" && continue
+                gum spin --spinner globe --title "Fetching..." -- sleep 1
+                local url=$(fetch_wallhaven_wallpaper "random")
+                [[ -n "$url" ]] && {
+                    local path=$(download_wallhaven_wallpaper "$url")
+                    [[ -n "$path" ]] && gum confirm "Apply now?" && SPECIFIC_WALLPAPER="$path" update_theme "specific"
+                }
                 ;;
             *"General"*)
-                gum spin --spinner globe --title "Fetching general wallpaper..." -- sleep 1
-                local image_url
-                image_url=$(fetch_wallhaven_wallpaper "general")
-
-                if [[ -n "$image_url" ]]; then
-                    local local_path
-                    local_path=$(download_wallhaven_wallpaper "$image_url")
-
-                    if [[ -n "$local_path" ]]; then
-                        gum style --foreground 42 "✅ Downloaded to: $local_path"
-
-                        if gum confirm "Apply this wallpaper now?"; then
-                            SPECIFIC_WALLPAPER="$local_path" update_theme "specific"
-                        fi
-                    fi
-                fi
+                gum spin --spinner globe --title "Fetching..." -- sleep 1
+                local url=$(fetch_wallhaven_wallpaper "general")
+                [[ -n "$url" ]] && download_wallhaven_wallpaper "$url" >/dev/null
                 ;;
             *"Anime"*)
-                gum spin --spinner globe --title "Fetching anime wallpaper..." -- sleep 1
-                local image_url
-                image_url=$(fetch_wallhaven_wallpaper "anime")
-
-                if [[ -n "$image_url" ]]; then
-                    local local_path
-                    local_path=$(download_wallhaven_wallpaper "$image_url")
-
-                    if [[ -n "$local_path" ]]; then
-                        gum style --foreground 42 "✅ Downloaded to: $local_path"
-
-                        if gum confirm "Apply this wallpaper now?"; then
-                            SPECIFIC_WALLPAPER="$local_path" update_theme "specific"
-                        fi
-                    fi
-                fi
+                gum spin --spinner globe --title "Fetching..." -- sleep 1
+                local url=$(fetch_wallhaven_wallpaper "anime")
+                [[ -n "$url" ]] && download_wallhaven_wallpaper "$url" >/dev/null
                 ;;
             *"People"*)
-                gum spin --spinner globe --title "Fetching people wallpaper..." -- sleep 1
-                local image_url
-                image_url=$(fetch_wallhaven_wallpaper "people")
-
-                if [[ -n "$image_url" ]]; then
-                    local local_path
-                    local_path=$(download_wallhaven_wallpaper "$image_url")
-
-                    if [[ -n "$local_path" ]]; then
-                        gum style --foreground 42 "✅ Downloaded to: $local_path"
-
-                        if gum confirm "Apply this wallpaper now?"; then
-                            SPECIFIC_WALLPAPER="$local_path" update_theme "specific"
-                        fi
-                    fi
-                fi
+                gum spin --spinner globe --title "Fetching..." -- sleep 1
+                local url=$(fetch_wallhaven_wallpaper "people")
+                [[ -n "$url" ]] && download_wallhaven_wallpaper "$url" >/dev/null
                 ;;
-            *"Configure Categories"*)
-                local categories
-                categories=$(gum choose \
-                    --header="Select categories to include:" \
-                    --no-limit \
-                    "General" "Anime" "People")
+            *"Settings"*)
+                local cats
+                cats=$(gum choose --no-limit "General" "Anime" "People")
+                local c="000"
+                [[ "$cats" == *"General"* ]] && c="${c:0:0}1${c:1:2}"
+                [[ "$cats" == *"Anime"* ]] && c="${c:0:1}1${c:2:1}"
+                [[ "$cats" == *"People"* ]] && c="${c:0:2}1"
+                WALLHAVEN_CATEGORIES="$c"
 
-                local cats="000"
-                if [[ "$categories" == *"General"* ]]; then
-                    cats="${cats:0:0}1${cats:1:2}"
-                fi
-                if [[ "$categories" == *"Anime"* ]]; then
-                    cats="${cats:0:1}1${cats:2:1}"
-                fi
-                if [[ "$categories" == *"People"* ]]; then
-                    cats="${cats:0:2}1"
-                fi
-
-                WALLHAVEN_CATEGORIES="$cats"
-
-                local resolution
-                resolution=$(gum input --placeholder "Resolution (e.g., 1920x1080)" --value "$WALLHAVEN_RESOLUTION")
-                if [[ -n "$resolution" ]]; then
-                    WALLHAVEN_RESOLUTION="$resolution"
-                fi
-
-                local limit
-                limit=$(gum input --placeholder "Number to fetch (max 24)" --value "$WALLHAVEN_LIMIT")
-                if [[ -n "$limit" ]]; then
-                    WALLHAVEN_LIMIT="$limit"
-                fi
+                local res
+                res=$(gum input --placeholder "Resolution" --value "$WALLHAVEN_RESOLUTION")
+                [[ -n "$res" ]] && WALLHAVEN_RESOLUTION="$res"
 
                 save_wallhaven_config
-                gum style --foreground 42 "✅ Categories configured!"
                 ;;
             *"Clean"*)
                 local days
-                days=$(gum input --placeholder "Delete wallpapers older than (days)" --value "$WALLHAVEN_CLEAN_DAYS")
-                if [[ -n "$days" ]]; then
-                    clean_wallhaven_folder "$days"
-                fi
+                days=$(gum input --placeholder "Days" --value "$WALLHAVEN_CLEAN_DAYS")
+                [[ -n "$days" ]] && clean_wallhaven_folder "$days"
                 ;;
             *"Open Folder"*)
-                xdg-open "$WALLHAVEN_DIR" 2>/dev/null || open "$WALLHAVEN_DIR" 2>/dev/null
+                xdg-open "$WALLHAVEN_DIR" 2>/dev/null || open "$WALLHAVEN_DIR" 2>/dev/null || true
                 ;;
             *"Back"*)
                 break
                 ;;
         esac
-
-        echo
-        if [[ "$choice" != *"Back"* ]]; then
-            gum confirm "Return to WallHaven menu?" --affirmative="Yes" --negative="Main Menu" || break
-        fi
     done
 }
 
-# Main theme update function
-update_theme() {
-    local mode="$1"
-    local condition=""
-    local wallpaper=""
-
-    log "Starting theme update (mode: $mode, force: $FORCE_MODE)"
-
-    # Get monitor resolution for aspect ratio checking
-    MONITOR_RESOLUTION=$(get_monitor_resolution)
-    log "Monitor resolution: $MONITOR_RESOLUTION"
-
-    # Determine condition based on mode
-    case "$mode" in
-        weather)
-            if [[ "$HAS_GUM" == true ]]; then
-                condition=$(gum spin --spinner globe --title "Fetching weather..." -- bash -c "fetch_weather_condition")
-            else
-                condition=$(fetch_weather_condition)
-            fi
-            ;;
-        time)
-            condition=$(date +%H)
-            if [[ $condition -ge 5 ]] && [[ $condition -lt 9 ]]; then
-                condition="morning"
-            elif [[ $condition -ge 9 ]] && [[ $condition -lt 17 ]]; then
-                condition="day"
-            elif [[ $condition -ge 17 ]] && [[ $condition -lt 20 ]]; then
-                condition="evening"
-            else
-                condition="night"
-            fi
-            ;;
-        random)
-            condition="random"
-            ;;
-        specific)
-            if [[ -n "${SPECIFIC_WALLPAPER:-}" ]]; then
-                wallpaper="$SPECIFIC_WALLPAPER"
-            fi
-            ;;
-        *)
-            condition="general"
-            ;;
-    esac
-
-    # Select wallpaper if not already set
-    if [[ -z "$wallpaper" ]]; then
-        if [[ "$HAS_GUM" == true ]]; then
-            wallpaper=$(gum spin --spinner dot --title "Selecting wallpaper for: $condition" -- bash -c "select_wallpaper '$condition'")
-        else
-            wallpaper=$(select_wallpaper "$condition")
-        fi
-    fi
-
-    if [[ -z "$wallpaper" ]]; then
-        # Don't exit - just notify and return
-        log "No wallpaper found. Please add images or use WallHaven."
-        notify "No Wallpaper" "Please add images or use WallHaven" "normal"
-        return 1
-    fi
-
-    CURRENT_WALLPAPER="$wallpaper"
-    log "Selected wallpaper: $wallpaper"
-
-    # Extract colors
-    local -a colors
-    if [[ "$HAS_GUM" == true ]]; then
-        mapfile -t colors < <(gum spin --spinner pulse --title "Extracting colors..." -- bash -c "extract_colors '$wallpaper' 8")
-    else
-        mapfile -t colors < <(extract_colors "$wallpaper" 8)
-    fi
-
-    # Show palette with gum
-    if [[ "$HAS_GUM" == true ]]; then
-        gum style --border rounded --margin "1" --padding "1" --border-foreground 212 "🎨 Generated Theme"
-
-        for i in "${!colors[@]}"; do
-            gum style \
-                --background "${colors[$i]}" \
-                --foreground "$(get_contrast_color "${colors[$i]}")" \
-                --padding "0 2" \
-                --margin "0 1" \
-                --align center \
-                "Color $i: ${colors[$i]}"
-        done
-    fi
-
-    # Set wallpaper
-    if [[ "$HAS_GUM" == true ]]; then
-        gum spin --spinner line --title "Applying wallpaper..." -- bash -c "set_wallpaper '$wallpaper'"
-    else
-        set_wallpaper "$wallpaper"
-    fi
-
-    # Update terminal colors
-    if [[ "$HAS_GUM" == true ]]; then
-        gum spin --spinner line --title "Updating terminal colors..." -- bash -c "update_terminal_colors '${colors[@]}'"
-    else
-        update_terminal_colors "${colors[@]}"
-    fi
-
-    # Update browser themes
-    if [[ "$HAS_GUM" == true ]]; then
-        gum spin --spinner line --title "Updating browser themes..." -- bash -c "update_browser_themes '${colors[@]}'"
-    else
-        update_browser_themes "${colors[@]}"
-    fi
-
-    # Generate Gradience preset
-    if [[ "$HAS_GUM" == true ]] && command -v gradience-cli >/dev/null 2>&1; then
-        gum spin --spinner line --title "Applying GTK theme..." -- bash -c "generate_gradience_preset '${colors[@]}'"
-    fi
-
-    # Run external hooks (including lockscreen and preview)
-    if [[ "$HAS_GUM" == true ]]; then
-        gum spin --spinner pipe --title "Triggering external hooks..." -- bash -c "run_hooks"
-    else
-        run_hooks
-    fi
-
-    # Auto-clean WallHaven if enabled
-    if [[ "$WALLHAVEN_AUTO_CLEAN" == true ]]; then
-        clean_wallhaven_folder "$WALLHAVEN_CLEAN_DAYS" >/dev/null 2>&1 &
-    fi
-
-    # Show success message
-    if [[ "$HAS_GUM" == true ]]; then
-        gum style --foreground 42 "✅ Theme updated successfully!"
-        gum table -s "|" -p <<EOF
-Mode|${mode}
-Condition|${condition}
-Profile|${CURRENT_THEME_PROFILE}
-Wallpaper|$(basename "$wallpaper")
-Primary Color|${colors[0]}
-Text Color|$(get_contrast_color "${colors[0]}")
-Hooks|$(ls -1 "${HOOKS_DIR}" 2>/dev/null | wc -l) available
-EOF
-    else
-        log "Theme update completed"
-    fi
-
-    # Send notification
-    notify "Theme Updated" "Mode: $mode | Profile: $CURRENT_THEME_PROFILE" "low"
-
-    # Save settings
-    save_settings
-}
-
-# Snapshot gallery
 snapshot_gallery() {
-    if [[ ! -d "$SNAPSHOTS_DIR" ]] || [[ -z "$(ls -A "$SNAPSHOTS_DIR")" ]]; then
-        gum style --foreground 214 "No snapshots found"
-        return
-    fi
+    [[ ! -d "$SNAPSHOTS_DIR" ]] || [[ -z "$(ls -A "$SNAPSHOTS_DIR")" ]] && { print_warning "No snapshots"; return; }
 
-    local snapshots=()
+    local snaps=()
     while IFS= read -r snap; do
-        snapshots+=("$(basename "$snap")")
+        snaps+=("$(basename "$snap")")
     done < <(find "$SNAPSHOTS_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r)
 
     while true; do
-        local selected_snap
-        selected_snap=$(gum choose --height=15 --header="📸 Snapshot Gallery (select to preview)" "${snapshots[@]}" "↩️  Back to menu")
+        local sel
+        sel=$(gum choose --height=15 "${snaps[@]}" "↩️  Back")
+        [[ "$sel" == "↩️  Back" ]] && break
 
-        if [[ "$selected_snap" == "↩️  Back to menu" ]] || [[ -z "$selected_snap" ]]; then
-            break
-        fi
-
-        # Show snapshot details
         clear
-        gum style --border double --margin "1" --padding "1" --border-foreground 212 "Snapshot: $selected_snap"
+        gum style --border double --margin "1" "Snapshot: $sel"
 
-        # Display thumbnail if available
-        local thumbnail="${THUMBNAILS_DIR}/${selected_snap}.jpg"
-        if [[ -f "$thumbnail" ]] && [[ "$USE_SIXEL" == true ]]; then
-            echo
-            display_thumbnail "$thumbnail"
-            echo
-        fi
+        local thumb="${THUMBNAILS_DIR}/${sel}.jpg"
+        [[ -f "$thumb" ]] && [[ "$USE_SIXEL" == true ]] && display_thumbnail "$thumb"
 
-        # Show snapshot info
-        if [[ -f "${SNAPSHOTS_DIR}/${selected_snap}/colors.txt" ]]; then
-            gum style --foreground 212 "Colors:"
-            head -10 "${SNAPSHOTS_DIR}/${selected_snap}/colors.txt"
-        fi
-
-        echo
         local action
-        action=$(gum choose "Load this snapshot" "Delete this snapshot" "Back to gallery")
+        action=$(gum choose "Load" "Delete" "Back")
 
         case "$action" in
-            "Load this snapshot")
-                load_snapshot "$selected_snap"
-                if gum confirm "Update theme now?"; then
-                    update_theme "random"
-                fi
+            "Load")
+                load_snapshot "$sel"
+                gum confirm "Update now?" && update_theme "random"
                 break
                 ;;
-            "Delete this snapshot")
-                if gum confirm "Delete $selected_snap?"; then
-                    rm -rf "${SNAPSHOTS_DIR}/${selected_snap}"
-                    rm -f "${THUMBNAILS_DIR}/${selected_snap}.jpg"
-                    snapshots=("${snapshots[@]/$selected_snap}")
-                    gum style --foreground 42 "✅ Snapshot deleted"
-                fi
+            "Delete")
+                gum confirm "Delete?" && {
+                    rm -rf "${SNAPSHOTS_DIR:?}/${sel}"
+                    rm -f "${THUMBNAILS_DIR:?}/${sel}.jpg"
+                    snaps=("${snaps[@]/$sel}")
+                }
                 ;;
         esac
     done
 }
 
-# Interactive menu with gum
 gum_main_menu() {
-    local choice
-
-    # Print welcome banner
     print_banner
 
     while true; do
-        # Check for app-based profile switching
-        if [[ "$AUTO_PROFILE_SWITCHING" == true ]]; then
-            check_and_switch_profile
-        fi
+        [[ "$AUTO_PROFILE_SWITCHING" == true ]] && check_and_switch_profile
 
-        # Show current profile in menu header
-        local profile_indicator=""
-        if [[ "$CURRENT_THEME_PROFILE" != "default" ]]; then
-            profile_indicator=" [Profile: ${CURRENT_THEME_PROFILE}]"
-        fi
+        local prof_ind=""
+        [[ "$CURRENT_THEME_PROFILE" != "default" ]] && prof_ind=" [Profile: ${CURRENT_THEME_PROFILE}]"
 
+        local choice
         choice=$(gum choose \
-            --header="🎨 My Theme Engine ${SCRIPT_VERSION}${profile_indicator}" \
+            --header="🎨 My Theme Engine ${SCRIPT_VERSION}${prof_ind}" \
             --cursor="👉 " \
-            --selected.foreground="212" \
-            --height=30 \
-            "🌤️  Weather-based theme" \
-            "⏰ Time-based theme" \
-            "🎲 Random theme" \
-            "🖼️  Select specific wallpaper" \
-            "🌌 WallHaven wallpapers" \
-            "📸 Snapshot gallery" \
-            "👤 Profile management" \
-            "🤖 Auto-profile rules" \
-            "⚙️  Configure settings" \
-            "👁️  Start folder watcher (debounced)" \
-            "🛑 Stop folder watcher" \
-            "🔄 Run as daemon" \
-            "🔧 Manage hooks" \
-            "📦 Install dependencies" \
-            "🎨 Show current colors" \
-            "🚀 Create desktop entry" \
-            "⚙️  Create systemd service" \
-            "🔄 Reset configuration" \
+            --height=20 \
+            "🌤️  Weather-based" \
+            "⏰ Time-based" \
+            "🎲 Random" \
+            "🖼️  Select wallpaper" \
+            "🌌 WallHaven" \
+            "📸 Snapshots" \
+            "👤 Profiles" \
+            "🤖 Auto-rules" \
+            "⚙️  Settings" \
+            "👁️  Start watcher" \
+            "🛑 Stop watcher" \
+            "🔄 Run daemon" \
+            "🛑 Stop daemon" \
+            "🔧 Hooks" \
+            "📦 Install deps" \
+            "🎨 Show colors" \
+            "🚀 Desktop entry" \
+            "⚙️  Systemd service" \
+            "🔄 Reset" \
+            "🔍 Diagnostics" \
             "❌ Exit")
 
         case "$choice" in
-            *Weather*)
-                CITY=$(gum input --placeholder "Enter city name (leave empty for auto-detect)" --value "$CITY")
-                FORCE_MODE=$(gum confirm "Force new wallpaper?" && echo true || echo false)
+            *"Weather"*)
+                CITY=$(gum input --placeholder "City" --value "$CITY")
+                FORCE_MODE=$(gum confirm "Force?" && echo true || echo false)
                 update_theme "weather"
                 ;;
-            *Time*)
-                FORCE_MODE=$(gum confirm "Force new wallpaper?" && echo true || echo false)
+            *"Time"*)
+                FORCE_MODE=$(gum confirm "Force?" && echo true || echo false)
                 update_theme "time"
                 ;;
-            *Random*)
-                FORCE_MODE=$(gum confirm "Force new wallpaper?" && echo true || echo false)
+            *"Random"*)
+                FORCE_MODE=$(gum confirm "Force?" && echo true || echo false)
                 update_theme "random"
                 ;;
-            *specific*|*wallpaper*)
-                local wallpaper_dir="$WALLPAPER_DIR"
-                if [[ "$CURRENT_THEME_PROFILE" != "default" ]]; then
-                    wallpaper_dir=$(get_profile_wallpaper_dir "$CURRENT_THEME_PROFILE")
-                fi
-
-                local wallpaper
-                wallpaper=$(find "$wallpaper_dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | \
-                    gum choose --height=20 --header="Select wallpaper:")
-                if [[ -n "$wallpaper" ]]; then
-                    SPECIFIC_WALLPAPER="$wallpaper" update_theme "specific"
-                fi
+            *"Select wallpaper"*)
+                local dir="$WALLPAPER_DIR"
+                [[ "$CURRENT_THEME_PROFILE" != "default" ]] && dir=$(get_profile_wallpaper_dir "$CURRENT_THEME_PROFILE")
+                local wall
+                wall=$(find "$dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | gum choose --height=20)
+                [[ -n "$wall" ]] && SPECIFIC_WALLPAPER="$wall" update_theme "specific"
                 ;;
-            *WallHaven*)
+            *"WallHaven"*)
                 wallhaven_menu
                 ;;
-            *gallery*)
+            *"Snapshots"*)
                 snapshot_gallery
                 ;;
-            *Profile*)
-                local prof_action=$(gum choose "Create profile" "Switch profile" "List profiles" "Delete profile")
-                case "$prof_action" in
-                    "Create profile")
-                        local prof_name=$(gum input --placeholder "Profile name")
-                        if [[ -n "$prof_name" ]]; then
-                            create_profile "$prof_name"
-                        fi
+            *"Profiles"*)
+                local act
+                act=$(gum choose "Create" "Switch" "List" "Delete")
+                case "$act" in
+                    "Create")
+                        local name=$(gum input --placeholder "Profile name")
+                        [[ -n "$name" ]] && create_profile "$name"
                         ;;
-                    "Switch profile")
-                        if [[ -d "$PROFILES_DIR" ]]; then
-                            local profiles=("default")
-                            while IFS= read -r prof; do
-                                profiles+=("$(basename "$prof")")
-                            done < <(find "$PROFILES_DIR" -mindepth 1 -maxdepth 1 -type d)
-
-                            local prof_to_switch=$(printf '%s\n' "${profiles[@]}" | gum choose)
-                            if [[ -n "$prof_to_switch" ]]; then
-                                if [[ "$prof_to_switch" == "default" ]]; then
-                                    rm -f "$CURRENT_PROFILE"
-                                    CURRENT_THEME_PROFILE="default"
-                                    WALLPAPER_DIR="${HOME}/Pictures/Wallpapers"
-                                    gum style --foreground 42 "✅ Switched to default profile"
-                                else
-                                    switch_profile "$prof_to_switch"
-                                fi
-                            fi
-                        fi
+                    "Switch")
+                        local profs=("default")
+                        [[ -d "$PROFILES_DIR" ]] && while IFS= read -r p; do profs+=("$(basename "$p")"); done < <(find "$PROFILES_DIR" -mindepth 1 -maxdepth 1 -type d)
+                        local to=$(printf '%s\n' "${profs[@]}" | gum choose)
+                        [[ -n "$to" ]] && switch_profile "$to"
                         ;;
-                    "List profiles")
-                        gum style --border rounded --margin "1" --padding "1" "👤 Theme Profiles"
-                        echo "  • default (current: $([[ "$CURRENT_THEME_PROFILE" == "default" ]] && echo "✓")"
-                        if [[ -d "$PROFILES_DIR" ]]; then
-                            for prof in "$PROFILES_DIR"/*; do
-                                if [[ -d "$prof" ]]; then
-                                    prof_name=$(basename "$prof")
-                                    echo "  • $prof_name $( [[ "$CURRENT_THEME_PROFILE" == "$prof_name" ]] && echo "✓")"
-                                fi
-                            done
-                        fi
+                    "List")
+                        gum style "Current profile: $CURRENT_THEME_PROFILE"
+                        [[ -d "$PROFILES_DIR" ]] && ls -1 "$PROFILES_DIR"
                         ;;
-                    "Delete profile")
-                        if [[ -d "$PROFILES_DIR" ]]; then
-                            local prof_to_delete=$(ls -1 "$PROFILES_DIR" | gum choose)
-                            if [[ -n "$prof_to_delete" ]] && gum confirm "Delete profile $prof_to_delete?"; then
-                                rm -rf "${PROFILES_DIR}/${prof_to_delete}"
-                                if [[ "$CURRENT_THEME_PROFILE" == "$prof_to_delete" ]]; then
-                                    rm -f "$CURRENT_PROFILE"
-                                    CURRENT_THEME_PROFILE="default"
-                                fi
-                                gum style --foreground 42 "✅ Profile deleted"
-                            fi
-                        fi
+                    "Delete")
+                        local to_del=$(ls -1 "$PROFILES_DIR" 2>/dev/null | gum choose)
+                        [[ -n "$to_del" ]] && gum confirm "Delete?" && rm -rf "${PROFILES_DIR:?}/${to_del}"
                         ;;
                 esac
                 ;;
-            *Auto-profile*|*rules*)
-                local rule_action=$(gum choose "Create rule" "List rules" "Delete rule" "Toggle auto-switching")
-                case "$rule_action" in
+            *"Auto-rules"*)
+                local act
+                act=$(gum choose "Create rule" "List rules" "Delete rule" "Toggle auto")
+                case "$act" in
                     "Create rule")
-                        local rule_name=$(gum input --placeholder "Rule name (e.g., work-apps)")
-                        if [[ -n "$rule_name" ]]; then
-                            create_profile_rule "$rule_name"
-                        fi
+                        local name=$(gum input --placeholder "Rule name")
+                        [[ -n "$name" ]] && create_profile_rule "$name"
                         ;;
                     "List rules")
-                        if [[ -d "$PROFILE_RULES_DIR" ]] && [[ -n "$(ls -A "$PROFILE_RULES_DIR")" ]]; then
-                            gum style --border rounded --margin "1" --padding "1" "📋 Profile Rules"
-                            for rule in "$PROFILE_RULES_DIR"/*.conf; do
-                                if [[ -f "$rule" ]]; then
-                                    source "$rule"
-                                    echo "  • $(basename "$rule" .conf): $APP_PATTERN → $PROFILE_NAME"
-                                fi
-                            done
-                        else
-                            gum style --foreground 214 "No rules found"
-                        fi
+                        [[ -d "$PROFILE_RULES_DIR" ]] && ls -1 "$PROFILE_RULES_DIR"
                         ;;
                     "Delete rule")
-                        if [[ -d "$PROFILE_RULES_DIR" ]]; then
-                            local rule_to_delete=$(ls -1 "$PROFILE_RULES_DIR" | gum choose)
-                            if [[ -n "$rule_to_delete" ]] && gum confirm "Delete rule $rule_to_delete?"; then
-                                rm "${PROFILE_RULES_DIR}/${rule_to_delete}"
-                                gum style --foreground 42 "✅ Rule deleted"
-                            fi
-                        fi
+                        local to_del=$(ls -1 "$PROFILE_RULES_DIR" 2>/dev/null | gum choose)
+                        [[ -n "$to_del" ]] && gum confirm "Delete?" && rm "${PROFILE_RULES_DIR:?}/${to_del}"
                         ;;
-                    "Toggle auto-switching")
+                    "Toggle auto")
                         AUTO_PROFILE_SWITCHING=$([[ "$AUTO_PROFILE_SWITCHING" == true ]] && echo false || echo true)
-                        gum style --foreground 42 "✅ Auto-switching: $AUTO_PROFILE_SWITCHING"
                         save_settings
                         ;;
                 esac
                 ;;
-            *Configure*|*settings*)
-                CITY=$(gum input --placeholder "City name (auto-detect if empty)" --value "$CITY")
-                NIGHT_OVERRIDE=$(gum input --placeholder "Night override hour (0-23)" --value "$NIGHT_OVERRIDE")
-                SATURATION_BOOST=$(gum input --placeholder "Saturation boost % (100-200)" --value "$SATURATION_BOOST")
-                CONTRAST_STRETCH=$(gum input --placeholder "Contrast stretch (e.g., 2%x2%)" --value "$CONTRAST_STRETCH")
-                BATTERY_AWARE=$(gum confirm "Enable battery-aware mode?" && echo true || echo false)
-                BATTERY_DEEP_SLEEP_THRESHOLD=$(gum input --placeholder "Deep sleep battery %" --value "$BATTERY_DEEP_SLEEP_THRESHOLD")
-                NOTIFY_ERRORS=$(gum confirm "Enable desktop notifications?" && echo true || echo false)
-                TEMP_MONITORING=$(gum confirm "Enable temperature monitoring?" && echo true || echo false)
-                HIGH_TEMP_THRESHOLD=$(gum input --placeholder "High temp threshold (°C)" --value "$HIGH_TEMP_THRESHOLD")
-                WALLHAVEN_AUTO_CLEAN=$(gum confirm "Auto-clean WallHaven folder?" && echo true || echo false)
-                WALLHAVEN_CLEAN_DAYS=$(gum input --placeholder "Clean wallpapers older than (days)" --value "$WALLHAVEN_CLEAN_DAYS")
+            *"Settings"*)
+                CITY=$(gum input --placeholder "City" --value "$CITY")
+                NIGHT_OVERRIDE=$(gum input --placeholder "Night hour" --value "$NIGHT_OVERRIDE")
+                SATURATION_BOOST=$(gum input --placeholder "Saturation %" --value "$SATURATION_BOOST")
+                BATTERY_AWARE=$(gum confirm "Battery aware?" && echo true || echo false)
+                NOTIFY_ERRORS=$(gum confirm "Notifications?" && echo true || echo false)
+                TEMP_MONITORING=$(gum confirm "Temperature monitoring?" && echo true || echo false)
                 save_settings
-                gum style --foreground 42 "✅ Settings saved!"
                 ;;
-            *watcher*)
+            *"Start watcher"*)
                 start_watcher
-                gum style --foreground 42 "✅ Debounced folder watcher started (PID: $(cat "$WATCH_PID_FILE"))"
-                gum style --foreground 214 "Press any key to stop..."
-                read -n 1
+                read -n 1 -p "Press any key to stop..."
                 stop_watcher
                 ;;
-            *Stop*)
+            *"Stop watcher"*)
                 stop_watcher
                 ;;
-            *daemon*)
-                local interval=$(gum input --placeholder "Update interval (minutes)" --value "30")
+            *"Run daemon"*)
+                local int=$(gum input --placeholder "Interval (minutes)" --value "30")
                 local mode=$(gum choose "weather" "time" "random")
-                gum confirm "Start daemon mode?" && run_daemon "$interval" "$mode"
+                gum confirm "Start daemon?" && run_daemon "$int" "$mode"
                 ;;
-            *hooks*)
-                local hook_action=$(gum choose "List hooks" "Create new hook" "Create Spotify hook" "Create lockscreen hook" "Create terminal preview" "Edit hook" "Delete hook")
-                case "$hook_action" in
-                    "List hooks")
-                        if [[ -d "$HOOKS_DIR" ]] && [[ -n "$(ls -A "$HOOKS_DIR")" ]]; then
-                            gum style --border rounded --margin "1" --padding "1" "Available Hooks"
-                            for hook in "$HOOKS_DIR"/*; do
-                                if [[ -x "$hook" ]]; then
-                                    gum style --foreground 42 "✓ $(basename "$hook")"
-                                elif [[ -f "$hook" ]]; then
-                                    gum style --foreground 214 "⚠️  $(basename "$hook") (not executable)"
-                                fi
-                            done
-                        else
-                            gum style --foreground 214 "No hooks found"
-                        fi
-                        ;;
-                    "Create new hook")
-                        local hook_name=$(gum input --placeholder "Hook name (e.g., update_vscode.sh)")
-                        if [[ -n "$hook_name" ]]; then
-                            local hook_path="${HOOKS_DIR}/${hook_name}"
-                            cat > "$hook_path" << 'EOF'
-#!/usr/bin/env bash
-# Auto-generated hook for my-theme.sh
-source "$HOME/.cache/my-theme/current_colors"
-echo "Hook executed at $(date)" >> "$HOME/.cache/my-theme/hook.log"
-EOF
-                            chmod +x "$hook_path"
-                            gum style --foreground 42 "✅ Created hook: $hook_name"
-                        fi
-                        ;;
-                    "Create Spotify hook")
-                        create_spicetify_hook
-                        gum style --foreground 42 "✅ Created Spotify hook"
-                        ;;
-                    "Create lockscreen hook")
-                        create_lockscreen_hook
-                        gum style --foreground 42 "✅ Created lockscreen hook (ultimate)"
-                        ;;
-                    "Create terminal preview")
-                        create_terminal_preview_hook
-                        gum style --foreground 42 "✅ Created terminal preview hook"
-                        ;;
-                    "Edit hook")
-                        local hook_to_edit=$(find "$HOOKS_DIR" -type f -exec basename {} \; | gum choose)
-                        if [[ -n "$hook_to_edit" ]]; then
-                            ${EDITOR:-vim} "${HOOKS_DIR}/${hook_to_edit}"
-                        fi
-                        ;;
-                    "Delete hook")
-                        local hook_to_delete=$(find "$HOOKS_DIR" -type f -exec basename {} \; | gum choose)
-                        if [[ -n "$hook_to_delete" ]] && gum confirm "Delete $hook_to_delete?"; then
-                            rm "${HOOKS_DIR}/${hook_to_delete}"
-                            gum style --foreground 42 "✅ Deleted hook"
-                        fi
-                        ;;
+            *"Stop daemon"*)
+                stop_daemon
+                ;;
+            *"Hooks"*)
+                local act
+                act=$(gum choose "List" "Create lockscreen" "Create preview" "Create spotify" "Edit" "Delete")
+                case "$act" in
+                    "List") ls -1 "$HOOKS_DIR" ;;
+                    "Create lockscreen") create_lockscreen_hook ;;
+                    "Create preview") create_terminal_preview_hook ;;
+                    "Create spotify") create_spicetify_hook ;;
+                    "Edit") ${EDITOR:-vim} "$HOOKS_DIR/$(ls -1 "$HOOKS_DIR" | gum choose)" ;;
+                    "Delete") rm -f "$HOOKS_DIR/$(ls -1 "$HOOKS_DIR" | gum choose)" ;;
                 esac
                 ;;
-            *dependencies*)
+            *"Install deps"*)
                 install_dependencies
                 ;;
-            *colors*)
-                if [[ -f "$COLOR_CACHE" ]]; then
-                    gum style --border rounded --margin "1" --padding "1" "Current Colors"
-                    while IFS= read -r line; do
-                        if [[ "$line" =~ ^(BG|FG|MUTED_BG|SELECTED_WALL|COLOR[0-9]+)=(.*) ]]; then
-                            key="${BASH_REMATCH[1]}"
-                            value="${BASH_REMATCH[2]}"
-                            if [[ "$value" =~ ^# ]]; then
-                                gum style --foreground "$value" "  $key: $value"
-                            else
-                                echo "  $key: $value"
-                            fi
-                        fi
-                    done < "$COLOR_CACHE"
-                else
-                    gum style --foreground 214 "No colors cached yet. Run an update first."
-                fi
+            *"Show colors"*)
+                [[ -f "$COLOR_CACHE" ]] && cat "$COLOR_CACHE" || echo "No colors cached"
                 ;;
-            *desktop*)
+            *"Desktop entry"*)
                 create_desktop_entry
-                gum style --foreground 42 "✅ Desktop entry created!"
                 ;;
-            *systemd*)
+            *"Systemd service"*)
                 create_systemd_service
-                gum style --foreground 42 "✅ Systemd service created!"
-                gum style --foreground 214 "Enable with: systemctl --user enable my-theme.service"
-                gum style --foreground 214 "Start with: systemctl --user start my-theme.service"
                 ;;
-            *Reset*)
-                if gum confirm "Reset all configuration?"; then
-                    rm -rf "${CACHE_DIR:?}"/*
-                    gum style --foreground 42 "✅ Configuration reset!"
-                fi
+            *"Reset"*)
+                gum confirm "Reset all?" && reset_config
                 ;;
-            *Exit*)
-                gum style --foreground 212 "Goodbye! 👋"
+            *"Diagnostics"*)
+                self_test
+                read -n 1 -p "Press any key..."
+                ;;
+            *"Exit"*)
+                echo -e "${GREEN}Goodbye!${NC}"
                 exit 0
                 ;;
         esac
 
         echo
-        if ! gum confirm "Return to main menu?" --affirmative="Yes" --negative="Exit"; then
-            gum style --foreground 212 "Goodbye! 👋"
-            exit 0
-        fi
+        gum confirm "Return to menu?" || exit 0
     done
 }
 
-# Show help
+print_banner() {
+    clear
+    cat << 'EOF'
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                                                                               ║
+║   ███╗   ███╗██╗   ██╗    ████████╗██╗  ██╗███████╗███╗   ███╗███████╗       ║
+║   ████╗ ████║╚██╗ ██╔╝    ╚══██╔══╝██║  ██║██╔════╝████╗ ████║██╔════╝       ║
+║   ██╔████╔██║ ╚████╔╝        ██║   ███████║█████╗  ██╔████╔██║█████╗         ║
+║   ██║╚██╔╝██║  ╚██╔╝         ██║   ██╔══██║██╔══╝  ██║╚██╔╝██║██╔══╝         ║
+║   ██║ ╚═╝ ██║   ██║          ██║   ██║  ██║███████╗██║ ╚═╝ ██║███████╗       ║
+║   ╚═╝     ╚═╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚══════╝       ║
+║                                                                               ║
+║                        Version v0.0.8 - Wael Isa                             ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+EOF
+    echo
+}
+
+# ==================== HELP ====================
+
 show_help() {
     cat << EOF
 my-theme.sh ${SCRIPT_VERSION} - Dynamic Wallpaper & System Theme Engine
 
-Usage: ${SCRIPT_NAME} [OPTIONS]
+USAGE:
+    $SCRIPT_NAME [OPTIONS]
 
-Options:
-    -h, --help              Show this help message
-    -v, --version           Show version information
-    -i, --interactive       Start interactive menu (default with no args)
-    -r, --random            Select random wallpaper
-    -t, --time              Select wallpaper based on time
-    -w, --weather           Select wallpaper based on weather
+OPTIONS:
+    -h, --help              Show this help
+    -v, --version           Show version
+    -i, --interactive       Start interactive menu (default)
+    -r, --random            Set random wallpaper
+    -t, --time              Set time-based wallpaper
+    -w, --weather           Set weather-based wallpaper
     -c, --city CITY         Set city for weather
-    -f, --force             Force new wallpaper (ignore cache)
-    -p, --profile PROFILE   Switch to theme profile
+    -f, --force             Force new wallpaper
+    -p, --profile PROFILE   Switch profile
     -d, --daemon            Run as daemon
-    --interval MIN          Update interval (default: 30)
+    --mode MODE             Daemon mode (random|weather|time)
+    --interval MIN          Daemon interval (default: 30)
     -s, --set FILE          Set specific wallpaper
-    --wallhaven [CATEGORY]  Fetch from WallHaven (general|anime|people|random)
-    --wallhaven-key KEY     Set WallHaven API key (secure)
-    --clean-wallhaven [DAYS] Clean old WallHaven wallpapers
+    --wallhaven [CAT]       Fetch from WallHaven
+    --wallhaven-key KEY     Set API key
+    --clean-wallhaven [DAYS] Clean old wallpapers
     --watch                 Start folder watcher
-    --stop-watch            Stop folder watcher
-    --snapshot NAME         Save current theme as snapshot
-    --load NAME             Load theme snapshot
-    --list-snapshots        List available snapshots
-    --list-profiles         List available profiles
-    --create-rule           Create auto-profile rule
+    --stop-watch            Stop watcher
+    --stop                  Stop daemon
+    --snapshot [NAME]       Save snapshot
+    --load NAME             Load snapshot
+    --list-snapshots        List snapshots
+    --list-profiles         List profiles
+    --list-hooks            List hooks
     --create-desktop        Create desktop entry
-    --create-service        Create systemd user service
+    --create-service        Create systemd service
     --install-deps          Install dependencies
-    --list-colors           Show current colors
-    --list-hooks            List available hooks
-    --run-hooks             Run hooks manually
     --reset-config          Reset configuration
+    --diagnostic            Run self-test
+    --debug                 Enable debug mode
 
-Examples:
-    ${SCRIPT_NAME}                          # Start interactive menu
-    ${SCRIPT_NAME} --weather --city "Paris" --force
-    ${SCRIPT_NAME} --profile work --daemon --interval 60
-    ${SCRIPT_NAME} --wallhaven anime        # Fetch anime wallpaper
-    ${SCRIPT_NAME} --wallhaven-key YOUR_API_KEY
-    ${SCRIPT_NAME} --clean-wallhaven 30
-    ${SCRIPT_NAME} --create-desktop         # Add to app launcher
-    ${SCRIPT_NAME} --create-service         # Create systemd service
+EXAMPLES:
+    $SCRIPT_NAME                    # Interactive menu
+    $SCRIPT_NAME --weather --city "London"
+    $SCRIPT_NAME --daemon --mode random --interval 30
+    $SCRIPT_NAME --wallhaven anime
+    $SCRIPT_NAME --diagnostic       # Test installation
 EOF
 }
 
-# List profiles
-list_profiles() {
-    echo "Available profiles:"
-    echo "  default (current: $([[ "$CURRENT_THEME_PROFILE" == "default" ]] && echo "✓")"
-    if [[ -d "$PROFILES_DIR" ]]; then
-        for prof in "$PROFILES_DIR"/*; do
-            if [[ -d "$prof" ]]; then
-                prof_name=$(basename "$prof")
-                echo "  $prof_name $( [[ "$CURRENT_THEME_PROFILE" == "$prof_name" ]] && echo "✓")"
-            fi
-        done
-    fi
-}
+# ==================== MAIN ====================
 
-# List snapshots
-list_snapshots() {
-    if [[ -d "$SNAPSHOTS_DIR" ]] && [[ -n "$(ls -A "$SNAPSHOTS_DIR")" ]]; then
-        echo "Available snapshots:"
-        for snap in "$SNAPSHOTS_DIR"/*; do
-            if [[ -d "$snap" ]]; then
-                echo "  • $(basename "$snap")"
-            fi
-        done
-    else
-        echo "No snapshots found"
-    fi
-}
+# Load settings
+load_settings
 
-# List hooks
-list_hooks() {
-    if [[ -d "$HOOKS_DIR" ]] && [[ -n "$(ls -A "$HOOKS_DIR" 2>/dev/null)" ]]; then
-        echo "Available hooks:"
-        for hook in "$HOOKS_DIR"/*; do
-            if [[ -x "$hook" ]]; then
-                echo "  ✓ $(basename "$hook")"
-            elif [[ -f "$hook" ]]; then
-                echo "  ⚠️  $(basename "$hook") (not executable)"
-            fi
-        done
-    else
-        echo "No hooks found in $HOOKS_DIR"
-    fi
-}
+# Create default hooks
+create_lockscreen_hook
+create_terminal_preview_hook
+create_spicetify_hook
 
-# Reset configuration
-reset_config() {
-    log "Resetting configuration..."
-    stop_watcher 2>/dev/null || true
-    rm -rf "${CACHE_DIR:?}"/*
-    rm -f "${SETTINGS_FILE}"
-    rm -f "$CURRENT_PROFILE"
-    rm -f "$LAST_ACTIVE_PROFILE"
-    rm -f "${WALLHAVEN_CONFIG}"
-    rm -f "${API_KEY_FILE}"
-    mkdir -p "${CACHE_DIR}" "${HOOKS_DIR}"
-    CURRENT_THEME_PROFILE="default"
-    log "Configuration reset complete"
+# Parse arguments
+HAS_GUM=$(check_gum)
 
-    if [[ "$HAS_GUM" == true ]]; then
-        gum style --foreground 42 "✅ Configuration reset complete"
-    fi
-
-    notify "Theme Engine" "Configuration reset"
-}
-
-# Main execution
-main() {
-    local mode="random"
-    local interval=30
-    local interactive=false
-    local daemon_mode=false
-    local specific_wallpaper=""
-    local wallhaven_category=""
-
-    # Load saved settings
-    load_settings
-
-    # Parse arguments
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            -h|--help)
-                show_help
-                exit 0
-                ;;
-            -v|--version)
-                echo "my-theme.sh ${SCRIPT_VERSION}"
-                exit 0
-                ;;
-            -i|--interactive)
-                interactive=true
-                shift
-                ;;
-            -r|--random)
-                mode="random"
-                shift
-                ;;
-            -t|--time)
-                mode="time"
-                shift
-                ;;
-            -w|--weather)
-                mode="weather"
-                shift
-                ;;
-            -c|--city)
-                CITY="$2"
-                shift 2
-                ;;
-            -f|--force)
-                FORCE_MODE=true
-                shift
-                ;;
-            -p|--profile)
-                switch_profile "$2" "no-update"
-                shift 2
-                ;;
-            -d|--daemon)
-                daemon_mode=true
-                shift
-                ;;
-            --interval)
-                interval="$2"
-                shift 2
-                ;;
-            -s|--set)
-                mode="specific"
-                specific_wallpaper="$2"
-                shift 2
-                ;;
-            --wallhaven)
-                wallhaven_category="${2:-random}"
-                shift 2
-                ;;
-            --wallhaven-key)
-                save_api_key "$2"
-                shift 2
-                ;;
-            --clean-wallhaven)
-                local days="${2:-$WALLHAVEN_CLEAN_DAYS}"
-                clean_wallhaven_folder "$days"
-                exit 0
-                ;;
-            --watch)
-                start_watcher
-                exit 0
-                ;;
-            --stop-watch)
-                stop_watcher
-                exit 0
-                ;;
-            --snapshot)
-                save_snapshot "$2"
-                shift 2
-                exit 0
-                ;;
-            --load)
-                load_snapshot "$2"
-                shift 2
-                # Optionally update after loading
-                if [[ "$HAS_GUM" == true ]] && [[ -t 0 ]]; then
-                    gum confirm "Update theme now?" && update_theme "random"
-                fi
-                exit 0
-                ;;
-            --list-snapshots)
-                list_snapshots
-                exit 0
-                ;;
-            --list-profiles)
-                list_profiles
-                exit 0
-                ;;
-            --create-rule)
-                if [[ -n "$2" ]]; then
-                    create_profile_rule "$2"
-                    shift 2
-                else
-                    echo "Usage: --create-rule RULE_NAME"
-                    exit 1
-                fi
-                exit 0
-                ;;
-            --create-desktop)
-                create_desktop_entry
-                exit 0
-                ;;
-            --create-service)
-                create_systemd_service
-                exit 0
-                ;;
-            --install-deps)
-                install_dependencies
-                exit 0
-                ;;
-            --list-colors)
-                if [[ -f "$COLOR_CACHE" ]]; then
-                    cat "$COLOR_CACHE"
-                else
-                    echo "No colors cached yet."
-                fi
-                exit 0
-                ;;
-            --list-hooks)
-                list_hooks
-                exit 0
-                ;;
-            --run-hooks)
-                run_hooks
-                exit 0
-                ;;
-            --reset-config)
-                if [[ "$HAS_GUM" == true ]] && [[ -t 0 ]]; then
-                    gum confirm "Reset configuration?" && reset_config
-                else
-                    reset_config
-                fi
-                exit 0
-                ;;
-            *)
-                echo "Unknown option: $1"
-                show_help
-                exit 1
-                ;;
-        esac
-    done
-
-    # Handle WallHaven direct fetch
-    if [[ -n "$wallhaven_category" ]]; then
-        gum spin --spinner globe --title "Fetching wallpaper from WallHaven..." -- sleep 1
-        local image_url
-        image_url=$(fetch_wallhaven_wallpaper "$wallhaven_category")
-
-        if [[ -n "$image_url" ]]; then
-            local local_path
-            local_path=$(download_wallhaven_wallpaper "$image_url")
-
-            if [[ -n "$local_path" ]]; then
-                echo "✅ Downloaded to: $local_path"
-                if [[ -t 0 ]] && gum confirm "Apply this wallpaper now?"; then
-                    SPECIFIC_WALLPAPER="$local_path" update_theme "specific"
-                fi
-            fi
-        fi
-        exit 0
-    fi
-
-    # Export for functions
-    export CITY
-    export SPECIFIC_WALLPAPER="$specific_wallpaper"
-    export FORCE_MODE
-
-    # Check if wallpaper directory exists (don't exit, just warn)
-    local wallpaper_dir_to_check="$WALLPAPER_DIR"
-    if [[ "$CURRENT_THEME_PROFILE" != "default" ]]; then
-        wallpaper_dir_to_check=$(get_profile_wallpaper_dir "$CURRENT_THEME_PROFILE")
-    fi
-
-    if [[ ! -d "$wallpaper_dir_to_check" ]]; then
-        mkdir -p "$wallpaper_dir_to_check"
-        log "Created wallpaper directory: $wallpaper_dir_to_check"
-        # Don't exit - just notify
-        if [[ "$HAS_GUM" == true ]] && [[ -t 0 ]] && [[ "$interactive" == true ]]; then
-            gum style --foreground 214 "⚠️  Created wallpaper directory. Use WallHaven to download wallpapers!"
-        fi
-    fi
-
-    # Create default hooks
-    create_spicetify_hook
-    create_lockscreen_hook
-    create_terminal_preview_hook
-
-    # Interactive mode
-    if [[ "$interactive" == true ]] || [[ $# -eq 0 && -t 0 ]]; then
-        if [[ "$HAS_GUM" == false ]]; then
-            echo "Gum is required for interactive mode. Installing..."
-            install_dependencies
-            # Recheck after installation
-            if command -v gum >/dev/null 2>&1; then
-                HAS_GUM=true
-            fi
-        fi
-
-        # Final check for gum
-        if [[ "$HAS_GUM" == true ]]; then
+# CRITICAL FIX: NEVER EXIT SILENTLY
+if [[ $# -eq 0 ]]; then
+    # No arguments provided
+    if [[ "$IS_TERMINAL" == true ]]; then
+        # In terminal: show interactive menu
+        if [[ "$HAS_GUM" == "true" ]]; then
             gum_main_menu
         else
-            echo "❌ Gum installation failed. Please install manually:"
-            echo "  - Debian/Ubuntu: sudo apt install gum"
-            echo "  - Arch: sudo pacman -S gum"
-            echo "  - Or download from: https://github.com/charmbracelet/gum"
-            exit 1
+            # No gum, show help
+            print_warning "Gum not installed. Install for better UI:"
+            echo "  ./$SCRIPT_NAME --install-deps"
+            show_help
         fi
-        exit 0
-    fi
-
-    # Check dependencies for non-interactive mode
-    if ! command -v magick >/dev/null 2>&1; then
-        error_exit "ImageMagick not found. Run with --install-deps to install."
-    fi
-
-    # Run in appropriate mode
-    if [[ "$daemon_mode" == true ]]; then
-        run_daemon "$interval" "$mode"
     else
-        update_theme "$mode"
+        # Not in terminal: run self-test (ALWAYS show output)
+        echo "my-theme.sh v${SCRIPT_VERSION} - Running in non-interactive mode"
+        echo "Run with --help for options, --diagnostic for self-test"
+        self_test
     fi
-}
-
-# Final Script Entry Logic - The Masterpiece
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    # If no arguments are passed AND we are in a terminal, force interactive
-    if [[ $# -eq 0 ]] && [[ -t 0 ]]; then
-        main --interactive
-    else
-        main "$@"
-    fi
+    exit 0
 fi
+
+# Parse arguments for non-interactive mode
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help) show_help; exit 0 ;;
+        -v|--version) echo "my-theme.sh ${SCRIPT_VERSION}"; exit 0 ;;
+        -i|--interactive)
+            if [[ "$HAS_GUM" == "true" ]]; then
+                gum_main_menu
+            else
+                print_error "Gum required for interactive mode"
+                exit 1
+            fi
+            exit 0
+            ;;
+        -r|--random) update_theme "random"; exit 0 ;;
+        -t|--time) update_theme "time"; exit 0 ;;
+        -w|--weather) update_theme "weather"; exit 0 ;;
+        -c|--city) CITY="$2"; save_settings; shift 2 ;;
+        -f|--force) FORCE_MODE=true; shift ;;
+        -p|--profile) switch_profile "$2"; shift 2 ;;
+        -d|--daemon)
+            local mode="random" interval=30
+            [[ "$2" =~ ^[0-9]+$ ]] && interval="$2" && shift
+            run_daemon "$interval" "$mode"
+            exit 0
+            ;;
+        --mode) MODE="$2"; shift 2 ;;
+        --interval) INTERVAL="$2"; shift 2 ;;
+        -s|--set)
+            [[ -f "$2" ]] && SPECIFIC_WALLPAPER="$2" update_theme "specific" || print_error "File not found: $2"
+            shift 2
+            exit 0
+            ;;
+        --wallhaven)
+            local cat="${2:-random}"
+            [[ "$cat" =~ ^(general|anime|people|random)$ ]] || cat="random"
+            local url=$(fetch_wallhaven_wallpaper "$cat")
+            [[ -n "$url" ]] && download_wallhaven_wallpaper "$url"
+            shift $([[ -n "$2" ]] && echo 2 || echo 1)
+            exit 0
+            ;;
+        --wallhaven-key) save_api_key "$2"; shift 2; exit 0 ;;
+        --clean-wallhaven)
+            local days="${2:-$WALLHAVEN_CLEAN_DAYS}"
+            clean_wallhaven_folder "$days"
+            shift $([[ -n "$2" ]] && echo 2 || echo 1)
+            exit 0
+            ;;
+        --watch) start_watcher; exit 0 ;;
+        --stop-watch) stop_watcher; exit 0 ;;
+        --stop) stop_daemon; exit 0 ;;
+        --snapshot) save_snapshot "$2"; shift $([[ -n "$2" ]] && echo 2 || echo 1); exit 0 ;;
+        --load) load_snapshot "$2"; shift 2; exit 0 ;;
+        --list-snapshots) ls -1 "$SNAPSHOTS_DIR" 2>/dev/null || echo "No snapshots"; exit 0 ;;
+        --list-profiles) ls -1 "$PROFILES_DIR" 2>/dev/null || echo "No profiles"; exit 0 ;;
+        --list-hooks) ls -1 "$HOOKS_DIR" 2>/dev/null || echo "No hooks"; exit 0 ;;
+        --create-desktop) create_desktop_entry; exit 0 ;;
+        --create-service) create_systemd_service; exit 0 ;;
+        --install-deps) install_dependencies; exit 0 ;;
+        --reset-config) reset_config; exit 0 ;;
+        --diagnostic) self_test; exit 0 ;;
+        --debug) DEBUG=true; shift ;;
+        *)
+            print_error "Unknown option: $1"
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
+# If we get here, something went wrong - show help
+show_help
+exit 0
