@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #############################################################################################################################
 # my-theme.sh - Dynamic Wallpaper & System Theme Engine
-# Version: v1.1.3
+# Version: v1.1.4
 # Build Date: 02/25/2026
 # Author: Wael Isa
 # Website: https://www.wael.name
@@ -14,15 +14,18 @@
 # ██║ ╚═╝ ██║   ██║          ██║   ██║  ██║███████╗██║ ╚═╝ ██║███████╗
 # ╚═╝     ╚═╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚══════╝
 #
-#                        Version v1.1.3 - Wael Isa
-#                 XFCE FIXED & DEBUGGABLE
+#                        Version v1.1.4 - Wael Isa
+#                 XFCE MULTI-MONITOR FIXED
 #
 # Description: Dynamic wallpaper and system theme engine with WallHaven integration,
 #              lockscreen synchronization, and full Gum-based TUI.
 #              COMPLETE SINGLE-FILE VERSION - No external modules needed!
 #
 # Features:
-#   • XFCE SUPPORT - Properly sets wallpaper on XFCE desktop
+#   • XFCE MULTI-MONITOR - Properly sets wallpaper on all monitors and workspaces
+#   • XFCE WORKSPACE SUPPORT - Updates all workspaces with the same wallpaper
+#   • XFCF CONF PROPER - Uses xfconf-query to set all last-image properties
+#   • FEH FALLBACK - Ensures wallpaper sets even if xfconf fails
 #   • DEBUG MODE - Run with DEBUG=true to see what's happening
 #   • FIXED: Now uses ~/Pictures/my-theme/wallpapers/ correctly
 #   • FIXED: WallHaven downloads now work properly
@@ -43,10 +46,12 @@
 #   • Debounced folder watcher
 #
 # Changelog:
+#   v1.1.4 - FIXED: XFCE multi-monitor and multi-workspace support
+#            ADDED: Proper xfconf-query for all last-image properties
+#            ADDED: Ensures image-show is set to true
+#            IMPROVED: XFCE fallback with feh
 #   v1.1.3 - ADDED: XFCE specific wallpaper setting
 #            ADDED: Debug mode to trace wallpaper setting
-#            FIXED: Better error messages for XFCE
-#            IMPROVED: Wallpaper setter logging
 #   v1.1.2 - FIXED: Wallpaper path now correctly uses ~/Pictures/my-theme/wallpapers/
 #            FIXED: WallHaven downloads now work properly
 #   v1.1.1 - SLIM: Removed all battery-related options
@@ -58,7 +63,7 @@
 set -uo pipefail
 
 # Version
-SCRIPT_VERSION="v1.1.3"
+SCRIPT_VERSION="v1.1.4"
 SCRIPT_NAME=$(basename "$0")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -237,7 +242,7 @@ auto_install() {
         pkgs=(ImageMagick feh bc curl jq inotify-tools xrandr lm_sensors chafa)
     elif command -v pacman >/dev/null 2>&1; then
         mgr="pacman"
-        pkgs=(imagemagick feh bc curl jq inotify-tools xorg-xrandr lm_sensors chafa)
+        pkgs=(imagemagick feh bc curl jq inotify-tools xorg-xrandr lm_sensors chafa xfconf)
     elif command -v zypper >/dev/null 2>&1; then
         mgr="zypper"
         pkgs=(imagemagick feh bc curl jq inotify-tools xrandr lm_sensors chafa)
@@ -277,9 +282,9 @@ auto_install() {
         deps_installed=true
     fi
 
-    # Install feh (required for XFCE/X11)
+    # Install feh (required for XFCE/X11 fallback)
     if ! command -v feh >/dev/null 2>&1; then
-        echo -e "${YELLOW}⚠️  feh not found - installing (required for XFCE/X11)...${NC}"
+        echo -e "${YELLOW}⚠️  feh not found - installing (recommended for XFCE/X11)...${NC}"
         if [[ "$mgr" == "apt" ]]; then
             sudo apt install -y feh
         elif [[ "$mgr" == "pacman" ]]; then
@@ -287,6 +292,13 @@ auto_install() {
         elif [[ "$mgr" == "dnf" ]]; then
             sudo dnf install -y feh
         fi
+        deps_installed=true
+    fi
+
+    # Install xfconf for XFCE (Arch Linux package is xfconf)
+    if [[ "$mgr" == "pacman" ]] && ! command -v xfconf-query >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  xfconf not found - installing for XFCE support...${NC}"
+        sudo pacman -S --noconfirm xfconf
         deps_installed=true
     fi
 
@@ -944,34 +956,61 @@ set_wallpaper() {
     print_debug "Setting wallpaper: DE=$de, Session=$session_type"
     print_debug "Wallpaper absolute path: $wall_abs"
 
-    # XFCE specific handling
+    # ==================== XFCE SPECIFIC HANDLING ====================
     if [[ "$de" == *"XFCE"* ]]; then
-        print_info "XFCE desktop detected, using xfconf-query"
+        print_info "XFCE desktop detected - applying to all monitors and workspaces"
+
         if command -v xfconf-query >/dev/null 2>&1; then
-            # Get all monitors
-            local monitors
-            monitors=$(xfconf-query -c xfce4-desktop -l | grep -E "last-image$" 2>/dev/null)
-            if [[ -n "$monitors" ]]; then
-                echo "$monitors" | while read -r monitor; do
-                    xfconf-query -c xfce4-desktop -p "$monitor" -s "$wall_abs" 2>/dev/null && \
-                        print_debug "Set wallpaper for: $monitor"
+            # First, ensure image-show is set to true for all screens
+            print_debug "Ensuring image-show is enabled for all screens"
+            local image_show_props
+            image_show_props=$(xfconf-query -c xfce4-desktop -l | grep "image-show" 2>/dev/null)
+            for prop in $image_show_props; do
+                xfconf-query -c xfce4-desktop -p "$prop" -s true 2>/dev/null && \
+                    print_debug "Enabled: $prop"
+            done
+
+            # Get all last-image properties (this covers all monitors and workspaces)
+            print_debug "Finding all last-image properties..."
+            local properties
+            properties=$(xfconf-query -c xfce4-desktop -l | grep "last-image" 2>/dev/null)
+
+            if [[ -n "$properties" ]]; then
+                local count=0
+                echo "$properties" | while read -r prop; do
+                    xfconf-query -c xfce4-desktop -p "$prop" -s "$wall_abs" 2>/dev/null && \
+                        print_debug "Set wallpaper for: $prop" && ((count++))
                 done
-                log "Wallpaper set via xfconf-query on all XFCE monitors"
-                run_hooks "$wall_abs"
-                return 0
+                log "Wallpaper set via xfconf-query on $count XFCE properties"
             else
-                # Fallback to common path
-                xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$wall_abs" 2>/dev/null && \
-                    log "Wallpaper set via xfconf-query (default path)"
-                run_hooks "$wall_abs"
-                return 0
+                print_warning "No last-image properties found, trying default paths"
+                # Fallback to common paths
+                for monitor in 0 1 2; do
+                    for workspace in 0 1 2 3; do
+                        xfconf-query -c xfce4-desktop -p "/backdrop/screen0/monitor$monitor/workspace$workspace/last-image" -s "$wall_abs" 2>/dev/null && \
+                            print_debug "Set wallpaper for monitor$monitor workspace$workspace"
+                    done
+                done
             fi
+
+            # Also set the single wallpaper property (legacy)
+            xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$wall_abs" 2>/dev/null
         else
-            print_warning "xfconf-query not found, falling back to feh"
+            print_warning "xfconf-query not found, XFCE wallpaper may not work"
         fi
+
+        # Always use feh as a safety net for XFCE (it sets the X11 root window)
+        if command -v feh >/dev/null 2>&1; then
+            print_debug "Using feh as XFCE safety net"
+            feh --bg-fill "$wall_abs" 2>/dev/null || true
+            log "Wallpaper set via feh (XFCE safety net)"
+        fi
+
+        run_hooks "$wall_abs"
+        return 0
     fi
 
-    # Wayland backends
+    # ==================== WAYLAND BACKENDS ====================
     if [[ "$session_type" == "wayland" ]] || [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
         if command -v swww >/dev/null 2>&1; then
             print_debug "Using swww for Wayland"
@@ -1009,7 +1048,7 @@ set_wallpaper() {
         fi
     fi
 
-    # Desktop Environments
+    # ==================== DESKTOP ENVIRONMENTS ====================
     if [[ "$de" == *"GNOME"* ]] || [[ "$de" == *"Unity"* ]] || [[ "$de" == *"Cinnamon"* ]]; then
         print_debug "Using GNOME/Unity/Cinnamon gsettings"
         gsettings set org.gnome.desktop.background picture-uri "file://$wall_abs" 2>/dev/null || true
@@ -1029,7 +1068,7 @@ set_wallpaper() {
         fi
     fi
 
-    # X11 generic backends (including XFCE fallback)
+    # ==================== X11 GENERIC BACKENDS ====================
     if [[ "$session_type" != "wayland" ]]; then
         if command -v feh >/dev/null 2>&1; then
             print_debug "Using feh for X11"
@@ -2009,8 +2048,8 @@ print_banner() {
 ║   ██║ ╚═╝ ██║   ██║          ██║   ██║  ██║███████╗██║ ╚═╝ ██║███████╗       ║
 ║   ╚═╝     ╚═╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚══════╝       ║
 ║                                                                               ║
-║                        Version v1.1.3 - Wael Isa                             ║
-║                 XFCE FIXED & DEBUGGABLE                                       ║
+║                        Version v1.1.4 - Wael Isa                             ║
+║                 XFCE MULTI-MONITOR FIXED                                      ║
 ║                                                                               ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 EOF
