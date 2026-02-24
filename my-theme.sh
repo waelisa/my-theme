@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #############################################################################################################################
 # my-theme.sh - Dynamic Wallpaper & System Theme Engine
-# Version: v1.0.8
-# Build Date: 02/24/2026
+# Version: v1.1.0
+# Build Date: 02/25/2026
 # Author: Wael Isa
 # Website: https://www.wael.name
 # GitHub: https://github.com/waelisa
@@ -14,30 +14,35 @@
 # ██║ ╚═╝ ██║   ██║          ██║   ██║  ██║███████╗██║ ╚═╝ ██║███████╗
 # ╚═╝     ╚═╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚══════╝
 #
-#                        Version v1.0.8 - Wael Isa
-#                    SAFE & ORGANIZED - PICTURES/MY-THEME
+#                        Version v1.1.0 - Wael Isa
+#                 MULTI-MONITOR MASTERPIECE - WORKS ON ALL SCREENS
 #
 # Description: Dynamic wallpaper and system theme engine with WallHaven integration,
 #              lockscreen synchronization, and full Gum-based TUI.
 #              COMPLETE SINGLE-FILE VERSION - No external modules needed!
 #
 # Features:
+#   • MULTI-MONITOR SUPPORT - Sets wallpaper on ALL connected screens
+#   • AUTO-INSTALLS EVERYTHING - All dependencies installed automatically
+#   • USES ~/Pictures/my-theme/wallpapers/ - Safe, organized wallpaper storage
 #   • Interactive menu by default (just run ./my-theme.sh)
 #   • 100% self-contained - everything in one file
-#   • SAFE - Works ONLY in ~/Pictures/my-theme, never touches user's Pictures directly
-#   • SMART - Shows helpful notes when no wallpapers are found
+#   • REMOVED set -e - No more silent exits!
+#   • FIXED: Unbound variable errors with WAYLAND_DISPLAY
+#   • FIXED: Auto-install now works properly
+#   • ABSOLUTE PATHS - Works with GNOME 45+, KDE 6, Wayland
+#   • TERMINAL COLOR SYNC - Terminal colors match wallpaper
+#   • NOTIFICATION SYSTEM - Shows wallpaper preview on theme change
+#   • AUTO-RESCUE - Downloads wallpapers when folder is empty
+#   • SAFE - Works ONLY in ~/Pictures/my-theme
 #   • AUTO-CREATES all missing folders
-#   • AUTO-INSTALLS all dependencies on first run
 #   • AUTO-CREATES default profiles and rules
 #   • AUTO-CREATES default hooks
-#   • Creates missing configuration files
 #   • Lockscreen synchronization (betterlockscreen & hyprlock)
 #   • WallHaven API integration with secure key storage
 #   • Terminal image preview (Sixel/Kitty support)
 #   • Systemd user service integration with PID management
 #   • Desktop entry for app launcher
-#   • API key management with password input
-#   • Welcome banner with ASCII art
 #   • Professional error handling with notifications
 #   • Auto-profile switching based on running apps
 #   • Temperature monitoring and battery-aware modes
@@ -45,12 +50,13 @@
 #   • Debounced folder watcher with deep sleep
 #
 # Changelog:
-#   v1.0.8 - SAFE MODE: All wallpapers now in ~/Pictures/my-theme
-#            Added smart "no wallpaper" notifications
-#            Never touches user's Pictures folder directly
-#            Auto-creates all required subfolders
+#   v1.1.0 - FIXED: Unbound variable errors
+#            FIXED: Auto-install now works correctly
+#            MULTI-MONITOR: Wallpaper sets on ALL screens
+#            ADDED: Full auto-install of all dependencies
+#   v1.0.9 - FIXED: All array syntax errors
+#   v1.0.8 - SAFE MODE: All wallpapers in ~/Pictures/my-theme
 #   v1.0.7 - Added auto-create missing profiles
-#            Added full auto-install on first run
 #   v1.0.6 - Removed set -e to prevent silent exits
 #   v1.0.5 - Fixed banner double-print issue
 #   v1.0.4 - Added auto-install prompt for gum
@@ -62,12 +68,16 @@
 #############################################################################################################################
 
 # ==================== CONFIGURATION ====================
+# CRITICAL: Removed -e to prevent silent exits on logical false conditions
 set -uo pipefail
 
 # Version
-SCRIPT_VERSION="v1.0.8"
+SCRIPT_VERSION="v1.1.0"
 SCRIPT_NAME=$(basename "$0")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Enable nullglob to prevent literal * when no files match
+shopt -s nullglob
 
 # Directories - SAFE MODE: All in ~/Pictures/my-theme, never touch ~/Pictures directly!
 MY_THEME_PICTURES="${HOME}/Pictures/my-theme"
@@ -88,6 +98,7 @@ SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
 # Files
 WEATHER_CACHE="${CACHE_DIR}/weather.cache"
 COLOR_CACHE="${CACHE_DIR}/current_colors"
+COLOR_CACHE_SH="${CACHE_DIR}/current_colors.sh"  # For sourcing in hooks
 LOG_FILE="${CACHE_DIR}/my-theme.log"
 SETTINGS_FILE="${CONFIG_DIR}/settings.conf"
 WATCH_PID_FILE="${CACHE_DIR}/watch.pid"
@@ -169,6 +180,81 @@ mkdir -p "${CONFIG_DIR}" "${CACHE_DIR}" "${GRADIENCE_DIR}" "${HOOKS_DIR}" \
     echo -e "${YELLOW}⚠️  Warning: Could not create some directories${NC}" >&2
 }
 
+# ==================== NOTIFICATION FUNCTIONS ====================
+
+# Send theme update notification with wallpaper preview
+send_theme_notification() {
+    local wall="$1"
+    local profile="${CURRENT_THEME_PROFILE:-Default}"
+
+    # Check if notify-send is installed
+    if command -v notify-send >/dev/null 2>&1; then
+        # Use the wallpaper itself as the icon (-i)
+        notify-send -a "My Theme Engine" \
+            -i "$wall" \
+            "🎨 Theme Updated: $profile" \
+            "Wallpaper: $(basename "$wall")" 2>/dev/null || true
+        log "Sent notification for theme update"
+    fi
+}
+
+# ==================== TERMINAL COLOR SYNC ====================
+
+# Update terminal colors via ANSI escape sequences
+sync_terminal_colors() {
+    local wall="$1"
+    local -a colors=()
+
+    # Extract colors if not provided
+    if [[ $# -lt 2 ]]; then
+        mapfile -t colors < <(extract_colors "$wall" 8)
+    else
+        colors=("${@:2}")
+    fi
+
+    # Save colors to a cache file for other apps to use
+    {
+        echo "export COLOR0='${colors[0]}'"
+        echo "export COLOR1='${colors[1]}'"
+        echo "export COLOR2='${colors[2]}'"
+        echo "export COLOR3='${colors[3]}'"
+        echo "export COLOR4='${colors[4]}'"
+        echo "export COLOR5='${colors[5]}'"
+        echo "export COLOR6='${colors[6]}'"
+        echo "export COLOR7='${colors[7]}'"
+        echo "export ACCENT='${colors[2]}'"
+        echo "export BACKGROUND='${colors[0]}'"
+        echo "export FOREGROUND='$(get_contrast_color "${colors[0]}")'"
+    } > "${COLOR_CACHE_SH}" 2>/dev/null || true
+
+    # Apply to all open terminals via ANSI escape sequences
+    # This works for almost every modern terminal emulator (Kitty, Alacritty, GNOME Terminal, etc.)
+    local tty_count=0
+    for tty in /dev/pts/[0-9]*; do
+        if [[ -w "$tty" ]]; then
+            # Set colors using OSC 4 and OSC 10/11 sequences
+            # Background
+            printf "\033]11;${colors[0]}\007" > "$tty" 2>/dev/null || continue
+            # Foreground
+            printf "\033]10;$(get_contrast_color "${colors[0]}")\007" > "$tty" 2>/dev/null || continue
+            # Color palette (0-7)
+            for i in {0..7}; do
+                if [[ $i -lt ${#colors[@]} ]]; then
+                    printf "\033]4;$i;${colors[$i]}\007" > "$tty" 2>/dev/null || continue
+                fi
+            done
+            ((tty_count++))
+        fi
+    done
+
+    if [[ $tty_count -gt 0 ]]; then
+        print_debug "Updated terminal colors in $tty_count terminal(s)"
+    fi
+
+    # Update specific terminal configs
+    update_terminal_colors "${colors[@]}"
+}
+
 # ==================== AUTO-INSTALL FUNCTION ====================
 auto_install() {
     # Skip if already run
@@ -180,22 +266,39 @@ auto_install() {
 
     # Check and install dependencies
     local deps_installed=false
+    local pkgs=()
+    local mgr=""
 
-    # Check for gum
+    # Detect package manager
+    if command -v apt >/dev/null 2>&1; then
+        mgr="apt"
+        pkgs=(imagemagick feh bc curl jq inotify-tools x11-utils acpi libnotify-bin lm-sensors chafa)
+    elif command -v dnf >/dev/null 2>&1; then
+        mgr="dnf"
+        pkgs=(ImageMagick feh bc curl jq inotify-tools xrandr acpi libnotify lm_sensors chafa)
+    elif command -v pacman >/dev/null 2>&1; then
+        mgr="pacman"
+        pkgs=(imagemagick feh bc curl jq inotify-tools xorg-xrandr acpi libnotify lm_sensors chafa)
+    elif command -v zypper >/dev/null 2>&1; then
+        mgr="zypper"
+        pkgs=(imagemagick feh bc curl jq inotify-tools xrandr acpi libnotify lm_sensors chafa)
+    fi
+
+    # Install gum
     if ! command -v gum >/dev/null 2>&1; then
         echo -e "${YELLOW}⚠️  Gum not found - installing...${NC}"
-        if command -v apt >/dev/null 2>&1; then
+        if [[ "$mgr" == "apt" ]]; then
             echo "deb [trusted=yes] https://repo.charm.sh/apt/ /" | sudo tee /etc/apt/sources.list.d/charm.list >/dev/null 2>&1
             sudo apt update && sudo apt install -y gum
             deps_installed=true
-        elif command -v pacman >/dev/null 2>&1; then
+        elif [[ "$mgr" == "pacman" ]]; then
             if command -v yay >/dev/null 2>&1; then
                 yay -S --noconfirm gum
             else
                 sudo pacman -S --noconfirm gum
             fi
             deps_installed=true
-        elif command -v dnf >/dev/null 2>&1; then
+        elif [[ "$mgr" == "dnf" ]]; then
             sudo dnf install -y gum
             deps_installed=true
         else
@@ -207,33 +310,108 @@ auto_install() {
         fi
     fi
 
-    # Check for ImageMagick
-    if ! command -v magick >/dev/null 2>&1 && ! command -v convert >/dev/null 2>&1; then
-        echo -e "${YELLOW}⚠️  ImageMagick not found - installing...${NC}"
-        if command -v apt >/dev/null 2>&1; then
-            sudo apt install -y imagemagick
-        elif command -v pacman >/dev/null 2>&1; then
-            sudo pacman -S --noconfirm imagemagick
-        elif command -v dnf >/dev/null 2>&1; then
-            sudo dnf install -y ImageMagick
+    # Install jq (required for Hyprland multi-monitor detection)
+    if ! command -v jq >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  jq not found - installing (required for multi-monitor support)...${NC}"
+        if [[ "$mgr" == "apt" ]]; then
+            sudo apt install -y jq
+        elif [[ "$mgr" == "pacman" ]]; then
+            sudo pacman -S --noconfirm jq
+        elif [[ "$mgr" == "dnf" ]]; then
+            sudo dnf install -y jq
+        elif [[ "$mgr" == "zypper" ]]; then
+            sudo zypper install -y jq
         fi
         deps_installed=true
     fi
 
-    # Check for inotify-tools (for watcher)
+    # Install feh for X11 multi-monitor support
+    if ! command -v feh >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  feh not found - installing (recommended for X11 multi-monitor)...${NC}"
+        if [[ "$mgr" == "apt" ]]; then
+            sudo apt install -y feh
+        elif [[ "$mgr" == "pacman" ]]; then
+            sudo pacman -S --noconfirm feh
+        elif [[ "$mgr" == "dnf" ]]; then
+            sudo dnf install -y feh
+        elif [[ "$mgr" == "zypper" ]]; then
+            sudo zypper install -y feh
+        fi
+        deps_installed=true
+    fi
+
+    # Install inotify-tools (for watcher)
     if ! command -v inotifywait >/dev/null 2>&1; then
         echo -e "${YELLOW}⚠️  inotify-tools not found - installing...${NC}"
-        if command -v apt >/dev/null 2>&1; then
+        if [[ "$mgr" == "apt" ]]; then
             sudo apt install -y inotify-tools
-        elif command -v pacman >/dev/null 2>&1; then
+        elif [[ "$mgr" == "pacman" ]]; then
             sudo pacman -S --noconfirm inotify-tools
-        elif command -v dnf >/dev/null 2>&1; then
+        elif [[ "$mgr" == "dnf" ]]; then
             sudo dnf install -y inotify-tools
+        elif [[ "$mgr" == "zypper" ]]; then
+            sudo zypper install -y inotify-tools
         fi
         deps_installed=true
     fi
 
-    # Create SAFE wallpaper directories in ~/Pictures/my-theme (never touch ~/Pictures directly!)
+    # Install acpi for battery detection
+    if ! command -v acpi >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  acpi not found - installing (for battery detection)...${NC}"
+        if [[ "$mgr" == "apt" ]]; then
+            sudo apt install -y acpi
+        elif [[ "$mgr" == "pacman" ]]; then
+            sudo pacman -S --noconfirm acpi
+        elif [[ "$mgr" == "dnf" ]]; then
+            sudo dnf install -y acpi
+        elif [[ "$mgr" == "zypper" ]]; then
+            sudo zypper install -y acpi
+        fi
+        deps_installed=true
+    fi
+
+    # Check for swww (Wayland wallpaper daemon) - only if on Wayland
+    if [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]] || [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        if ! command -v swww >/dev/null 2>&1; then
+            echo -e "${YELLOW}⚠️  swww not found - installing (recommended for Wayland multi-monitor)...${NC}"
+            if command -v cargo >/dev/null 2>&1; then
+                cargo install swww
+            elif [[ "$mgr" == "apt" ]]; then
+                sudo apt install -y swww
+            elif [[ "$mgr" == "pacman" ]]; then
+                sudo pacman -S --noconfirm swww
+            fi
+            deps_installed=true
+        fi
+
+        # Install hyprpaper for Hyprland users
+        if command -v hyprctl >/dev/null 2>&1 && ! command -v hyprpaper >/dev/null 2>&1; then
+            echo -e "${YELLOW}⚠️  hyprpaper not found - installing for Hyprland multi-monitor...${NC}"
+            if [[ "$mgr" == "apt" ]]; then
+                sudo apt install -y hyprpaper
+            elif [[ "$mgr" == "pacman" ]]; then
+                sudo pacman -S --noconfirm hyprpaper
+            fi
+            deps_installed=true
+        fi
+    fi
+
+    # Install remaining packages from the package manager
+    if [[ ${#pkgs[@]} -gt 0 && -n "$mgr" ]]; then
+        echo -e "${YELLOW}⚠️  Installing additional dependencies...${NC}"
+        if [[ "$mgr" == "apt" ]]; then
+            sudo apt update && sudo apt install -y "${pkgs[@]}"
+        elif [[ "$mgr" == "dnf" ]]; then
+            sudo dnf install -y "${pkgs[@]}"
+        elif [[ "$mgr" == "pacman" ]]; then
+            sudo pacman -S --noconfirm "${pkgs[@]}"
+        elif [[ "$mgr" == "zypper" ]]; then
+            sudo zypper install -y "${pkgs[@]}"
+        fi
+        deps_installed=true
+    fi
+
+    # Create SAFE wallpaper directories in ~/Pictures/my-theme
     mkdir -p "${MY_THEME_PICTURES}" 2>/dev/null
 
     # Create all wallpaper category folders
@@ -272,7 +450,7 @@ Use WallHaven integration to automatically download wallpapers!
 Happy theming! 🎨
 EOF
 
-    # Create a sample notice in each folder (optional)
+    # Create placeholder files in each folder
     for folder in clear rainy cloudy snowy foggy stormy night morning day evening general; do
         if [[ ! -f "${WALLPAPER_DIR}/${folder}/.placeholder" ]]; then
             touch "${WALLPAPER_DIR}/${folder}/.placeholder" 2>/dev/null
@@ -313,6 +491,9 @@ PROFILE_NAME="web"
 EOF
     fi
 
+    # Create the terminal color sync hook
+    create_terminal_color_hook
+
     # Create default hooks
     create_lockscreen_hook
     create_terminal_preview_hook
@@ -331,17 +512,98 @@ EOF
     fi
 }
 
-# ==================== CHECK FOR WALLPAPERS ====================
-check_for_wallpapers() {
-    local dir="${1:-$WALLPAPER_DIR}"
-    local found=false
+# ==================== CREATE TERMINAL COLOR HOOK ====================
+create_terminal_color_hook() {
+    local hook="${HOOKS_DIR}/01-terminal-colors.sh"
+    [[ -f "$hook" ]] && return
 
-    # Quick check if any images exist
-    if find "$dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" -o -iname "*.gif" \) 2>/dev/null | head -1 | grep -q .; then
-        found=true
+    cat > "$hook" << 'EOF'
+#!/usr/bin/env bash
+
+# Terminal Color Synchronization Hook
+# This runs after every theme update to sync terminal colors
+
+WALLPAPER="$1"
+CACHE_DIR="$HOME/.cache/my-theme"
+mkdir -p "$CACHE_DIR"
+
+# Source the colors if available
+if [[ -f "$CACHE_DIR/current_colors.sh" ]]; then
+    source "$CACHE_DIR/current_colors.sh"
+else
+    # Extract colors using ImageMagick
+    mapfile -t colors < <(magick "$WALLPAPER" -colors 8 -unique-colors txt:- 2>/dev/null | grep -oh "#[0-9A-F]\{6\}" | head -n 8)
+
+    # Save to cache file
+    {
+        echo "export COLOR0='${colors[0]}'"
+        echo "export COLOR1='${colors[1]}'"
+        echo "export COLOR2='${colors[2]}'"
+        echo "export COLOR3='${colors[3]}'"
+        echo "export COLOR4='${colors[4]}'"
+        echo "export COLOR5='${colors[5]}'"
+        echo "export COLOR6='${colors[6]}'"
+        echo "export COLOR7='${colors[7]}'"
+        echo "export ACCENT='${colors[2]}'"
+    } > "$CACHE_DIR/current_colors.sh"
+
+    source "$CACHE_DIR/current_colors.sh"
+fi
+
+# Apply to all open terminals via ANSI escape sequences
+for tty in /dev/pts/[0-9]*; do
+    [[ -w "$tty" ]] || continue
+
+    # Set background color
+    printf "\033]11;${COLOR0}\007" > "$tty" 2>/dev/null || continue
+
+    # Set foreground color (contrast based on background)
+    # Calculate luminance to determine if text should be light or dark
+    r=$((16#${COLOR0:1:2}))
+    g=$((16#${COLOR0:3:2}))
+    b=$((16#${COLOR0:5:2}))
+    luminance=$(( (r*299 + g*587 + b*114) / 1000 ))
+
+    if [[ $luminance -gt 128 ]]; then
+        FG="#000000"  # Dark text for light backgrounds
+    else
+        FG="#FFFFFF"  # Light text for dark backgrounds
     fi
 
-    if [[ "$found" == false ]] && [[ ! -f "$NO_WALLPAPER_NOTICE" ]]; then
+    printf "\033]10;${FG}\007" > "$tty" 2>/dev/null
+
+    # Set color palette (0-7)
+    printf "\033]4;0;${COLOR0}\007" > "$tty" 2>/dev/null
+    printf "\033]4;1;${COLOR1}\007" > "$tty" 2>/dev/null
+    printf "\033]4;2;${COLOR2}\007" > "$tty" 2>/dev/null
+    printf "\033]4;3;${COLOR3}\007" > "$tty" 2>/dev/null
+    printf "\033]4;4;${COLOR4}\007" > "$tty" 2>/dev/null
+    printf "\033]4;5;${COLOR5}\007" > "$tty" 2>/dev/null
+    printf "\033]4;6;${COLOR6}\007" > "$tty" 2>/dev/null
+    printf "\033]4;7;${COLOR7}\007" > "$tty" 2>/dev/null
+done
+
+echo "Terminal colors synchronized to wallpaper palette."
+EOF
+    chmod +x "$hook"
+    print_debug "Created terminal color sync hook"
+}
+
+# ==================== CHECK FOR WALLPAPERS ====================
+has_wallpapers() {
+    local dir="$1"
+    if [[ -d "$dir" ]] && find "$dir" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" -o -iname "*.gif" \) 2>/dev/null | head -1 | grep -q .; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+check_for_wallpapers() {
+    local dir="${1:-$WALLPAPER_DIR}"
+
+    # Quick check if any images exist
+    if ! has_wallpapers "$dir" && [[ ! -f "$NO_WALLPAPER_NOTICE" ]]; then
         # Show notice only once
         touch "$NO_WALLPAPER_NOTICE"
 
@@ -355,13 +617,21 @@ check_for_wallpapers() {
         echo -e "${GREEN}Options:${NC}"
         echo -e "  1. ${BOLD}Add your own wallpapers${NC} to the folders above"
         echo -e "  2. ${BOLD}Use WallHaven${NC} to download wallpapers automatically"
-        echo -e "  3. ${BOLD}Run with --force${NC} to use any available images (if any appear later)"
-        echo
-        echo -e "${CYAN}The menu will still work - you can configure settings and use WallHaven!${NC}"
+        echo -e "  3. ${BOLD}Let me download a starter pack for you${NC} (recommended)"
         echo
 
         if command -v gum >/dev/null 2>&1 && [[ "$IS_TERMINAL" == true ]]; then
-            gum confirm "Continue to menu?" --affirmative="Yes" --negative="Exit" || exit 0
+            if gum confirm "Download starter wallpapers from WallHaven?" --affirmative="Yes" --negative="No"; then
+                print_info "Downloading starter wallpapers..."
+                local count=0
+                for i in {1..3}; do
+                    local url
+                    url=$(fetch_wallhaven_wallpaper "general") && {
+                        download_wallhaven_wallpaper "$url" >/dev/null 2>&1 && ((count++))
+                    }
+                done
+                print_success "Downloaded $count starter wallpapers!"
+            fi
         fi
     fi
 
@@ -704,16 +974,6 @@ get_profile_wallpaper_dir() {
     fi
 }
 
-# Check if any wallpapers exist in directory
-has_wallpapers() {
-    local dir="$1"
-    if [[ -d "$dir" ]] && find "$dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | head -1 | grep -q .; then
-        return 0
-    else
-        return 1
-    fi
-}
-
 # Select wallpaper
 select_wallpaper() {
     local condition="$1"
@@ -727,7 +987,14 @@ select_wallpaper() {
     # Force mode - random from main dir
     if [[ "$FORCE_MODE" == true ]]; then
         if has_wallpapers "$dir"; then
-            selected=$(find "$dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf -n 1)
+            local -a files=("$dir"/*.{jpg,jpeg,png,bmp,gif})
+            local -a valid_files=()
+            for f in "${files[@]}"; do
+                [[ -f "$f" ]] && valid_files+=("$f")
+            done
+            if [[ ${#valid_files[@]} -gt 0 ]]; then
+                selected="${valid_files[$RANDOM % ${#valid_files[@]}]}"
+            fi
         fi
         if [[ -n "$selected" ]]; then
             echo "$selected"
@@ -741,29 +1008,45 @@ select_wallpaper() {
     # Try specific subfolder
     target="${dir}/${condition}"
     if [[ -d "$target" ]] && has_wallpapers "$target"; then
+        # Get all images in the folder
+        local -a files=("$target"/*.{jpg,jpeg,png,bmp,gif})
+        local -a valid_files=()
+        for f in "${files[@]}"; do
+            [[ -f "$f" ]] && valid_files+=("$f")
+        done
+
         # Try aspect ratio match first
-        while IFS= read -r img; do
+        for img in "${valid_files[@]}"; do
             if check_aspect_ratio "$img"; then
                 selected="$img"
                 print_debug "Found aspect-ratio match: $img"
                 break
             fi
-        done < <(find "$target" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf)
+        done
 
-        # Fallback to any
-        [[ -z "$selected" ]] && selected=$(find "$target" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf -n 1)
+        # Fallback to random
+        if [[ -z "$selected" && ${#valid_files[@]} -gt 0 ]]; then
+            selected="${valid_files[$RANDOM % ${#valid_files[@]}]}"
+        fi
     fi
 
     # Fallback to main directory
     if [[ -z "$selected" ]]; then
         if [[ -d "$dir" ]] && has_wallpapers "$dir"; then
             print_warning "No wallpapers in '${condition}' folder, using main directory"
-            selected=$(find "$dir" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | shuf -n 1)
-        else
-            print_warning "No wallpapers found anywhere in ${dir}"
-            echo ""
-            return
+            local -a files=("$dir"/*.{jpg,jpeg,png,bmp,gif})
+            local -a valid_files=()
+            for f in "${files[@]}"; do
+                [[ -f "$f" ]] && valid_files+=("$f")
+            done
+            if [[ ${#valid_files[@]} -gt 0 ]]; then
+                selected="${valid_files[$RANDOM % ${#valid_files[@]}]}"
+            fi
         fi
+    fi
+
+    if [[ -z "$selected" ]]; then
+        print_warning "No wallpapers found anywhere in ${dir}"
     fi
 
     echo "$selected"
@@ -812,44 +1095,135 @@ display_thumbnail() {
 }
 
 # ==================== WALLPAPER SETTER ====================
-
+# MULTI-MONITOR VERSION - Sets wallpaper on ALL connected screens
 set_wallpaper() {
     local wall="$1"
+
+    # 1. Validation - Ensure path isn't empty and file exists
+    if [[ -z "$wall" || ! -f "$wall" ]]; then
+        log "Error: Wallpaper path invalid or file missing: $wall"
+        print_error "Wallpaper not found: $wall"
+        return 1
+    fi
+
+    # 2. Convert to absolute path (CRITICAL for GNOME, KDE, and multi-monitor)
+    local wall_abs
+    wall_abs=$(readlink -f "$wall")
+    log "Applying wallpaper to ALL monitors: $wall_abs"
+
+    # 3. Send notification (but don't fail if it doesn't work)
+    send_theme_notification "$wall_abs" 2>/dev/null || true
+
+    # 4. Sync terminal colors (if we have colors, use them; otherwise extract now)
+    if [[ $# -gt 1 ]]; then
+        # Colors were passed as additional arguments
+        sync_terminal_colors "$wall_abs" "${@:2}"
+    else
+        # Extract colors now
+        local -a colors
+        mapfile -t colors < <(extract_colors "$wall_abs" 8)
+        sync_terminal_colors "$wall_abs" "${colors[@]}"
+    fi
+
+    # 5. Detect session type and apply wallpaper to ALL monitors
     local de="${XDG_CURRENT_DESKTOP:-}"
-    local sess="${XDG_SESSION_TYPE:-x11}"
+    local session_type="${XDG_SESSION_TYPE:-}"
 
-    print_debug "Setting wallpaper (DE: $de, Session: $sess)"
-    [[ ! -f "$wall" ]] && { print_warning "Wallpaper not found: $wall"; return 1; }
+    print_debug "Setting wallpaper: DE=$de, Session=$session_type"
 
-    case "$de" in
-        *GNOME*|*Unity*|*Cinnamon*)
-            gsettings set org.gnome.desktop.background picture-uri "file://$wall" 2>/dev/null || true
-            gsettings set org.gnome.desktop.background picture-uri-dark "file://$wall" 2>/dev/null || true
-            ;;
-        *KDE*|*Plasma*)
-            command -v qdbus >/dev/null 2>&1 && \
-                qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
-                    "var allDesktops = desktops(); for (var i=0; i<allDesktops.length; i++) { d = allDesktops[i]; d.currentConfigGroup = Array('Wallpapers', 'org.kde.image', 'General'); d.writeConfig('Image', 'file://$wall'); }" 2>/dev/null || true
-            ;;
-        *XFCE*)
-            xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$wall" 2>/dev/null || true
-            ;;
-        *sway*|*Hyprland*|*Wayland*)
-            if command -v swww >/dev/null 2>&1; then
-                pgrep -x "swww-daemon" >/dev/null || { swww-daemon & sleep 1; }
-                swww img "$wall" --transition-fps 60 --transition-type grow --transition-pos 0.9,0.9 --transition-duration 2 2>/dev/null || true
-            elif command -v swaybg >/dev/null 2>&1; then
-                pkill swaybg 2>/dev/null || true
-                swaybg -i "$wall" -m fill &
+    # --- WAYLAND BACKENDS (Multi-monitor aware) ---
+    if [[ "$session_type" == "wayland" ]] || [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        # swww - Best for Wayland multi-monitor
+        if command -v swww >/dev/null 2>&1; then
+            if ! pgrep -x "swww-daemon" >/dev/null; then
+                swww-daemon &
+                sleep 0.5
             fi
-            ;;
-        *)
-            command -v feh >/dev/null 2>&1 && feh --bg-fill "$wall" 2>/dev/null || true
-            command -v nitrogen >/dev/null 2>&1 && nitrogen --set-zoom-fill "$wall" 2>/dev/null || true
-            ;;
-    esac
+            # swww automatically applies to all monitors
+            swww img "$wall_abs" \
+                --transition-type grow \
+                --transition-pos 0.85,0.85 \
+                --transition-step 90 \
+                --transition-fps 60 \
+                --transition-duration 2 2>/dev/null || true
+            log "Wallpaper set via swww on all monitors"
+            return 0
 
-    print_success "Wallpaper set: $(basename "$wall")"
+        # hyprpaper - Manual multi-monitor loop for Hyprland
+        elif command -v hyprctl >/dev/null 2>&1 && command -v hyprpaper >/dev/null 2>&1; then
+            # Preload the image
+            hyprctl hyprpaper preload "$wall_abs" 2>/dev/null || true
+
+            # Get all active monitors using jq (requires jq)
+            if command -v jq >/dev/null 2>&1; then
+                local monitors
+                monitors=$(hyprctl monitors -j | jq -r '.[] | .name' 2>/dev/null)
+                for mon in $monitors; do
+                    hyprctl hyprpaper wallpaper "$mon, $wall_abs" 2>/dev/null || true
+                    log "Wallpaper set via hyprpaper on monitor: $mon"
+                done
+            else
+                # Fallback to first monitor if jq not available
+                local monitor
+                monitor=$(hyprctl monitors | grep "Monitor" | awk '{print $2}' | head -n1)
+                [[ -n "$monitor" ]] && hyprctl hyprpaper wallpaper "$monitor, $wall_abs" 2>/dev/null || true
+            fi
+            return 0
+        fi
+    fi
+
+    # --- DESKTOP ENVIRONMENTS (DEs handle multi-monitor internally) ---
+    # GNOME (Handles both Light and Dark modes)
+    if [[ "$de" == *"GNOME"* ]] || [[ "$de" == *"Unity"* ]] || [[ "$de" == *"Cinnamon"* ]]; then
+        gsettings set org.gnome.desktop.background picture-uri "file://$wall_abs" 2>/dev/null || true
+        gsettings set org.gnome.desktop.background picture-uri-dark "file://$wall_abs" 2>/dev/null || true
+        log "Wallpaper set via GNOME gsettings (affects all monitors)"
+        return 0
+
+    # KDE Plasma
+    elif [[ "$de" == *"KDE"* ]] || [[ "$de" == *"Plasma"* ]]; then
+        if command -v qdbus >/dev/null 2>&1; then
+            qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
+                "var allDesktops = desktops(); for (var i=0; i<allDesktops.length; i++) { d = allDesktops[i]; d.currentConfigGroup = Array('Wallpaper', 'org.kde.image', 'General'); d.writeConfig('Image', 'file://$wall_abs'); }" 2>/dev/null || true
+            log "Wallpaper set via KDE qdbus (affects all monitors)"
+            return 0
+        fi
+
+    # XFCE
+    elif [[ "$de" == *"XFCE"* ]]; then
+        if command -v xfconf-query >/dev/null 2>&1; then
+            xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/workspace0/last-image -s "$wall_abs" 2>/dev/null || true
+            log "Wallpaper set via XFCE"
+            return 0
+        fi
+    fi
+
+    # --- X11 GENERIC BACKENDS (Multi-monitor capable) ---
+    if [[ "$session_type" != "wayland" ]]; then
+        # feh - Best for X11 multi-monitor (--bg-fill applies to all screens)
+        if command -v feh >/dev/null 2>&1; then
+            feh --bg-fill "$wall_abs" 2>/dev/null || true
+            log "Wallpaper set via feh on all X11 monitors"
+            return 0
+
+        # nitrogen - Can handle multi-monitor with --set-zoom-fill
+        elif command -v nitrogen >/dev/null 2>&1; then
+            nitrogen --set-zoom-fill "$wall_abs" 2>/dev/null || true
+            log "Wallpaper set via nitrogen"
+            return 0
+
+        # xwallpaper - Single monitor only, but better than nothing
+        elif command -v xwallpaper >/dev/null 2>&1; then
+            xwallpaper --stretch "$wall_abs" 2>/dev/null || true
+            log "Wallpaper set via xwallpaper (single monitor only)"
+            return 0
+        fi
+    fi
+
+    # If we got here, no wallpaper setter was found
+    print_error "No compatible wallpaper setter found!"
+    print_info "Please install one of: feh (X11), swww (Wayland), or use a Desktop Environment"
+    return 1
 }
 
 # ==================== TERMINAL/BROWSER THEMES ====================
@@ -861,7 +1235,7 @@ update_terminal_colors() {
     fg=$(get_contrast_color "$bg")
     muted=$(darken_color "$bg" 20)
 
-    # Save to cache
+    # Save to cache (for hooks to use)
     {
         echo "BG=$bg"
         echo "FG=$fg"
@@ -870,9 +1244,9 @@ update_terminal_colors() {
         for i in "${!colors[@]}"; do echo "COLOR$i=${colors[$i]}"; done
         echo "TIMESTAMP=$(date +%s)"
         echo "PROFILE=$CURRENT_THEME_PROFILE"
-    } > "$COLOR_CACHE"
+    } > "$COLOR_CACHE" 2>/dev/null || true
 
-    print_debug "Updating terminal colors"
+    print_debug "Updating terminal colors via config files"
 
     # Xresources
     if [[ -f "${HOME}/.Xresources" ]]; then
@@ -894,7 +1268,7 @@ update_terminal_colors() {
             for i in {0..15}; do
                 [[ $i -lt ${#colors[@]} ]] && echo "color$i ${colors[$i]}"
             done
-        } > "${HOME}/.config/kitty/theme.conf"
+        } > "${HOME}/.config/kitty/theme.conf" 2>/dev/null || true
         pgrep -x "kitty" >/dev/null && kill -SIGUSR1 $(pgrep -x "kitty") 2>/dev/null || true
     fi
 }
@@ -976,25 +1350,33 @@ create_lockscreen_hook() {
 
     cat > "$hook" << 'EOF'
 #!/usr/bin/env bash
+
+# Ultimate Lockscreen Synchronization Hook
+WALLPAPER="$1"
 CACHE="$HOME/.cache/my-theme/current_colors"
 [[ -f "$CACHE" ]] && source "$CACHE"
 
 # betterlockscreen
-command -v betterlockscreen >/dev/null 2>&1 && [[ -n "$SELECTED_WALL" ]] && [[ -f "$SELECTED_WALL" ]] && \
-    betterlockscreen -u "$SELECTED_WALL" --blur 0.5 &
+if command -v betterlockscreen >/dev/null 2>&1 && [[ -f "$WALLPAPER" ]]; then
+    betterlockscreen -u "$WALLPAPER" --blur 0.5 &
+    echo "betterlockscreen updated"
+fi
 
 # hyprlock
-[[ -d "$HOME/.config/hypr" ]] && {
-    mkdir -p "$HOME/.config/hypr"
-    cat > "$HOME/.config/hypr/theme_vars.conf" << INNER
-# Generated $(date)
-\$accent = rgb(${COLOR2#\#})
-\$bg = rgb(${BG#\#})
-\$fg = rgb(${FG#\#})
-\$muted = rgb(${MUTED_BG#\#})
-\$wallpaper = $SELECTED_WALL
-INNER
-}
+if [[ -d "$HOME/.config/hypr" ]] && [[ -f "$WALLPAPER" ]]; then
+    HYPR_VARS="$HOME/.config/hypr/theme_vars.conf"
+    mkdir -p "$(dirname "$HYPR_VARS")"
+    {
+        echo "# Generated by my-theme.sh - $(date)"
+        echo "\$wallpaper = $WALLPAPER"
+        [[ -n "$COLOR2" ]] && echo "\$accent = rgb(${COLOR2#\#})"
+        [[ -n "$BG" ]] && echo "\$bg = rgb(${BG#\#})"
+        [[ -n "$FG" ]] && echo "\$fg = rgb(${FG#\#})"
+    } > "$HYPR_VARS"
+    echo "hyprlock theme variables updated"
+fi
+
+echo "Lockscreen synchronization complete"
 EOF
     chmod +x "$hook"
 }
@@ -1005,16 +1387,19 @@ create_terminal_preview_hook() {
 
     cat > "$hook" << 'EOF'
 #!/usr/bin/env bash
+
+# Terminal Preview Hook
+WALLPAPER="$1"
 CACHE="$HOME/.cache/my-theme/current_colors"
 [[ -f "$CACHE" ]] && source "$CACHE"
 
 if [[ "$TERM" == *"kitty"* ]] || [[ "$TERM" == *"sixel"* ]]; then
-    [[ -n "$SELECTED_WALL" ]] && [[ -f "$SELECTED_WALL" ]] && {
+    if [[ -f "$WALLPAPER" ]]; then
         echo
         echo "📸 Wallpaper Preview:"
-        chafa "$SELECTED_WALL" --size=40x20 2>/dev/null || true
+        chafa "$WALLPAPER" --size=40x20 2>/dev/null || true
         echo
-    }
+    fi
 fi
 EOF
     chmod +x "$hook"
@@ -1026,12 +1411,15 @@ create_spicetify_hook() {
 
     cat > "$hook" << 'EOF'
 #!/usr/bin/env bash
+
+# Spicetify Spotify theme updater
+WALLPAPER="$1"
 CACHE="$HOME/.cache/my-theme/current_colors"
 [[ -f "$CACHE" ]] && source "$CACHE"
 
 SPOTIFY_THEME="$HOME/.config/spicetify/Themes/MyTheme"
 
-command -v spicetify >/dev/null 2>&1 && {
+if command -v spicetify >/dev/null 2>&1; then
     mkdir -p "$SPOTIFY_THEME"
     cat > "$SPOTIFY_THEME/color.ini" << INNER
 [Base]
@@ -1047,7 +1435,8 @@ playback_bar = ${COLOR2#\#}
 INNER
     spicetify config current_theme MyTheme
     spicetify apply -quiet
-}
+    echo "Spotify theme updated"
+fi
 EOF
     chmod +x "$hook"
 }
@@ -1055,12 +1444,15 @@ EOF
 run_hooks() {
     [[ ! -d "$HOOKS_DIR" ]] && return
     local count=0
+    local wallpaper="$1"
 
     for hook in "$HOOKS_DIR"/*; do
-        [[ -x "$hook" ]] && [[ ! -d "$hook" ]] && {
-            "$hook" > "${CACHE_DIR}/hook_$(basename "$hook").log" 2>&1 &
+        if [[ -x "$hook" ]] && [[ ! -d "$hook" ]]; then
+            log "Executing hook: $(basename "$hook")"
+            # Pass wallpaper as argument to hooks
+            "$hook" "$wallpaper" > "${CACHE_DIR}/hook_$(basename "$hook").log" 2>&1 &
             ((count++))
-        }
+        fi
     done
 
     [[ $count -gt 0 ]] && print_debug "Started $count hook(s)"
@@ -1087,12 +1479,15 @@ fetch_wallhaven_wallpaper() {
     print_debug "Fetching WallHaven: $params"
 
     local resp
-    resp=$(curl -s "${url}?${params}")
+    resp=$(curl -s "${url}?${params}" 2>/dev/null)
 
     local urls
     mapfile -t urls < <(echo "$resp" | jq -r '.data[].path // empty' 2>/dev/null)
 
-    [[ ${#urls[@]} -eq 0 ]] && { print_warning "No wallpapers found"; return 1; }
+    if [[ ${#urls[@]} -eq 0 ]]; then
+        print_warning "No wallpapers found from WallHaven"
+        return 1
+    fi
 
     echo "${urls[$RANDOM % ${#urls[@]}]}"
 }
@@ -1397,9 +1792,18 @@ update_theme() {
     fi
 
     if [[ -z "$wallpaper" ]]; then
-        print_warning "No wallpaper found! Please add wallpapers to:"
-        print_warning "  ${WALLPAPER_DIR}/${condition}"
-        print_warning "  or use WallHaven to download some!"
+        print_warning "No wallpaper found! Attempting to download from WallHaven..."
+        # Rescue: Try to download a wallpaper
+        local url
+        url=$(fetch_wallhaven_wallpaper "general")
+        if [[ -n "$url" ]]; then
+            wallpaper=$(download_wallhaven_wallpaper "$url")
+        fi
+    fi
+
+    if [[ -z "$wallpaper" ]]; then
+        print_error "No wallpaper found! Please add wallpapers to:"
+        print_error "  ${WALLPAPER_DIR}/${condition}"
         notify "No Wallpaper" "Please add wallpapers or use WallHaven" "normal"
         return 1
     fi
@@ -1407,14 +1811,20 @@ update_theme() {
     CURRENT_WALLPAPER="$wallpaper"
     print_success "Selected: $(basename "$wallpaper")"
 
+    # Extract colors
+    local -a colors
     mapfile -t colors < <(extract_colors "$wallpaper" 8)
 
-    set_wallpaper "$wallpaper"
-    update_terminal_colors "${colors[@]}"
-    update_browser_themes "${colors[@]}"
-    command -v gradience-cli >/dev/null 2>&1 && generate_gradience_preset "${colors[@]}"
-    run_hooks
+    # Set wallpaper with colors (so set_wallpaper doesn't need to re-extract)
+    set_wallpaper "$wallpaper" "${colors[@]}"
 
+    # Update browser themes
+    update_browser_themes "${colors[@]}"
+
+    # Generate Gradience preset if available
+    command -v gradience-cli >/dev/null 2>&1 && generate_gradience_preset "${colors[@]}"
+
+    # Auto-clean WallHaven if enabled
     [[ "$WALLHAVEN_AUTO_CLEAN" == true ]] && clean_wallhaven_folder "$WALLHAVEN_CLEAN_DAYS" >/dev/null 2>&1 &
 
     print_success "Theme updated!"
@@ -1463,61 +1873,7 @@ run_daemon() {
 
 install_dependencies() {
     print_info "Installing dependencies..."
-
-    local pkgs=()
-    local mgr=""
-
-    if command -v apt >/dev/null 2>&1; then
-        mgr="apt"
-        pkgs=(imagemagick feh bc curl jq inotify-tools x11-utils acpi libnotify-bin lm-sensors chafa)
-    elif command -v dnf >/dev/null 2>&1; then
-        mgr="dnf"
-        pkgs=(ImageMagick feh bc curl jq inotify-tools xrandr acpi libnotify lm_sensors chafa)
-    elif command -v pacman >/dev/null 2>&1; then
-        mgr="pacman"
-        pkgs=(imagemagick feh bc curl jq inotify-tools xorg-xrandr acpi libnotify lm_sensors chafa)
-    elif command -v zypper >/dev/null 2>&1; then
-        mgr="zypper"
-        pkgs=(imagemagick feh bc curl jq inotify-tools xrandr acpi libnotify lm_sensors chafa)
-    else
-        error_exit "Unsupported package manager"
-    fi
-
-    # Install gum
-    if ! command -v gum >/dev/null 2>&1; then
-        if [[ "$mgr" == "apt" ]]; then
-            echo "deb [trusted=yes] https://repo.charm.sh/apt/ /" | sudo tee /etc/apt/sources.list.d/charm.list
-            sudo apt update && sudo apt install -y gum
-        elif [[ "$mgr" == "pacman" ]]; then
-            if command -v yay >/dev/null 2>&1; then
-                yay -S --noconfirm gum
-            else
-                sudo pacman -S --noconfirm gum
-            fi
-        else
-            curl -L https://github.com/charmbracelet/gum/releases/download/v0.14.0/gum_0.14.0_linux_x86_64.tar.gz | tar xz
-            sudo mv gum_*/gum /usr/local/bin/
-        fi
-    fi
-
-    # Install packages
-    if [[ "$mgr" == "apt" ]]; then
-        sudo apt update && sudo apt install -y "${pkgs[@]}"
-    elif [[ "$mgr" == "dnf" ]]; then
-        sudo dnf install -y "${pkgs[@]}"
-    elif [[ "$mgr" == "pacman" ]]; then
-        sudo pacman -S --noconfirm "${pkgs[@]}"
-    elif [[ "$mgr" == "zypper" ]]; then
-        sudo zypper install -y "${pkgs[@]}"
-    fi
-
-    # swww for Wayland
-    if [[ "$XDG_SESSION_TYPE" == "wayland" ]] && ! command -v swww >/dev/null 2>&1; then
-        command -v cargo >/dev/null 2>&1 && cargo install swww
-    fi
-
-    print_success "Dependencies installed!"
-    notify "Theme Engine" "Dependencies installed"
+    auto_install
 }
 
 create_desktop_entry() {
@@ -1600,7 +1956,7 @@ self_test() {
 
     # Test dependencies
     echo "• Dependencies:"
-    for dep in bash grep sed curl magick feh xrandr acpi notify-send inotifywait; do
+    for dep in bash grep sed curl magick feh xrandr acpi notify-send inotifywait swww jq; do
         echo -n "  $dep... "
         if command -v "$dep" >/dev/null 2>&1; then
             echo -e "${GREEN}✓${NC}"
@@ -1820,9 +2176,29 @@ gum_main_menu() {
                     sleep 2
                     continue
                 fi
-                local wall
-                wall=$(find "$dir" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.bmp" \) 2>/dev/null | gum choose --height=20)
-                [[ -n "$wall" ]] && SPECIFIC_WALLPAPER="$wall" update_theme "specific"
+
+                local -a files=("$dir"/*.{jpg,jpeg,png,bmp,gif})
+                local -a valid_files=()
+                for f in "${files[@]}"; do
+                    [[ -f "$f" ]] && valid_files+=("$f")
+                done
+
+                if [[ ${#valid_files[@]} -eq 0 ]]; then
+                    print_warning "No image files found in $dir"
+                    continue
+                fi
+
+                # Create a list of basenames for gum
+                local choices=()
+                for f in "${valid_files[@]}"; do
+                    choices+=("$(basename "$f")")
+                done
+
+                local selected_name
+                selected_name=$(printf '%s\n' "${choices[@]}" | gum choose --height=20 --header="Select wallpaper:")
+                if [[ -n "$selected_name" ]]; then
+                    SPECIFIC_WALLPAPER="$dir/$selected_name" update_theme "specific"
+                fi
                 ;;
             *"WallHaven"*)
                 wallhaven_menu
@@ -1902,12 +2278,13 @@ gum_main_menu() {
                 ;;
             *"Hooks"*)
                 local act
-                act=$(gum choose "List" "Create lockscreen" "Create preview" "Create spotify" "Edit" "Delete")
+                act=$(gum choose "List" "Create lockscreen" "Create preview" "Create spotify" "Create terminal color" "Edit" "Delete")
                 case "$act" in
                     "List") ls -1 "$HOOKS_DIR" ;;
                     "Create lockscreen") create_lockscreen_hook ;;
                     "Create preview") create_terminal_preview_hook ;;
                     "Create spotify") create_spicetify_hook ;;
+                    "Create terminal color") create_terminal_color_hook ;;
                     "Edit") ${EDITOR:-vim} "$HOOKS_DIR/$(ls -1 "$HOOKS_DIR" | gum choose)" ;;
                     "Delete") rm -f "$HOOKS_DIR/$(ls -1 "$HOOKS_DIR" | gum choose)" ;;
                 esac
@@ -1916,7 +2293,13 @@ gum_main_menu() {
                 install_dependencies
                 ;;
             *"Show colors"*)
-                [[ -f "$COLOR_CACHE" ]] && cat "$COLOR_CACHE" || echo "No colors cached"
+                if [[ -f "$COLOR_CACHE" ]]; then
+                    cat "$COLOR_CACHE"
+                elif [[ -f "$COLOR_CACHE_SH" ]]; then
+                    cat "$COLOR_CACHE_SH"
+                else
+                    echo "No colors cached"
+                fi
                 ;;
             *"Desktop entry"*)
                 create_desktop_entry
@@ -1954,8 +2337,8 @@ print_banner() {
 ║   ██║ ╚═╝ ██║   ██║          ██║   ██║  ██║███████╗██║ ╚═╝ ██║███████╗       ║
 ║   ╚═╝     ╚═╝   ╚═╝          ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚══════╝       ║
 ║                                                                               ║
-║                        Version v1.0.8 - Wael Isa                             ║
-║                    SAFE & ORGANIZED - PICTURES/MY-THEME                       ║
+║                        Version v1.1.0 - Wael Isa                             ║
+║                 MULTI-MONITOR MASTERPIECE - WORKS ON ALL SCREENS              ║
 ║                                                                               ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 EOF
@@ -2070,6 +2453,7 @@ main() {
     create_lockscreen_hook 2>/dev/null || true
     create_terminal_preview_hook 2>/dev/null || true
     create_spicetify_hook 2>/dev/null || true
+    create_terminal_color_hook 2>/dev/null || true
 
     # Handle interactive mode
     if [[ "$interactive_mode" == true ]]; then
